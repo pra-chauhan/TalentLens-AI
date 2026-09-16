@@ -1,0 +1,6 @@
+{
+  "name": "TalentLens AI",
+  "description": "Evidence-First AI Talent Intelligence Platform — Explainable candidate-job matching, skill graph, transferability, learning distance, and recruiter copilot.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
