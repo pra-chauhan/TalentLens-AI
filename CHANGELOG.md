@@ -2,6 +2,37 @@
 
 All notable changes to TalentLens AI are documented here.
 
+## [1.0.0] - 2026-10-04
+### Major Workflow Update
+- **Candidate Portal Self-Service AI Resume Analyzer & ATS Optimizer**:
+  - Replaced predefined candidate selection with real document upload (PDF, DOC, DOCX, TXT) and target job role selection.
+  - Multi-step progress interface displaying real parsing, ontology extraction, and matching stages.
+  - Estimated ATS Compatibility Score (/100) with 6-category breakdown (parsing compatibility, keyword alignment, skills alignment, experience alignment, structure, and relevance).
+  - ATS formatting warnings (multi-column layouts, tables, glyphs/icons, non-standard section titles) with recommended alternatives.
+  - Section-by-section structure analysis (Professional Summary, Skills, Experience, Projects, Education, Certifications, Achievements) categorized into Strong, Present, Weak, and Missing.
+  - Skill Gap Analysis table with ethical classification ("Not demonstrated in the uploaded resume" rather than "Candidate doesn't know it").
+  - Ethical ATS Keyword Recommendations (Already demonstrated, Demonstrated indirectly, and Not demonstrated with strict anti-fabrication warnings).
+  - Resume Content Quality score (Clarity, Impact, Relevance, Technical evidence, Achievement strength).
+  - Resume Optimizer & In-Browser Editor supporting 4 rewrite modes (Conservative, Stronger, ATS Optimized, Recruiter Friendly).
+  - Real Score Simulator showing BEFORE vs AFTER scores with delta improvements (+X ATS structure, +Y keyword alignment, etc.) and visual diffs.
+- **Recruiter Portal Dynamic Bulk Screening**:
+  - Removed reliance on predefined candidates.
+  - Requisition definition from custom job role and pasted Job Description.
+  - Multi-file drag & drop resume upload (up to 50 files) with SHA-256 duplicate file detection.
+  - Dynamic candidate profile extraction and deterministic ranking using the evidence-first matching engine.
+  - Advisory recommendation categories: "Strong Match", "Potential Match", "Needs Review", "Low Match".
+  - Comprehensive filtering by minimum match score, experience, recommendation category, and learning distance.
+  - Preserved deep candidate intelligence views (`MatchEvidenceModal`, `InterviewGeneratorModal`, `WhatIfSimulator`, `CopilotModal`, `JobQualityAnalyzerModal`).
+  - Side-by-side Candidate Comparison Matrix comparing 2–4 selected candidates.
+  - Export screened candidates to CSV report.
+  - Screening Sessions History to reopen past screening batches.
+- **Backend Architecture & Document Parser**:
+  - Implemented `src/server/documentParser.ts` for PDF, DOCX, DOC, and TXT with Gemini 3.8 Flash multimodal OCR fallback.
+  - Implemented `src/server/atsService.ts` for comprehensive ATS scoring and formatting checks.
+  - Implemented `src/server/optimizationService.ts` for multi-mode resume suggestions and diff tracking.
+  - Implemented `src/server/screeningService.ts` for batch processing, duplicate detection, and candidate comparison.
+  - Added automated test suite `tests/workflows.test.ts` verifying candidate and recruiter workflows.
+
 ## [0.1.0] - 2026-09-16
 ### Added
 - Initial release of TalentLens AI (Evidence-First AI Talent Intelligence Platform).

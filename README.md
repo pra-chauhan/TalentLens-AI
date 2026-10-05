@@ -25,6 +25,75 @@ Traditional Applicant Tracking Systems (ATS) and modern AI screening tools suffe
 
 ---
 
+## 🔄 Core User Workflows
+
+TalentLens AI is architected around two specialized, production-ready workflows built for real resume documents (PDF, DOCX, DOC):
+
+### 1. Candidate Portal — Self-Service AI Resume Analyzer & ATS Optimizer
+
+The candidate portal is a self-service intelligence engine that requires **no predefined candidate selection** and **no manual copy-pasting of resume text**. Upload your actual resume document:
+
+```
+Upload Resume (PDF/DOC/DOCX)
+           ↓
+Select Target Job Role (or Custom Role)
+           ↓
+Paste Target Job Description
+           ↓
+Click "Analyze My Resume"
+           ↓
+Inspect Complete Analysis Report
+  • ATS Compatibility Score (Breakdown out of 100)
+  • ATS Formatting Warnings & Recommended Alternatives
+  • Section Structure Analysis (Summary, Skills, Exp, Projects, etc.)
+  • Verified Strengths & Weaknesses
+  • Skill Gap Analysis & Ethical Keyword Recommendations
+  • Prioritized Action Roadmap
+           ↓
+Open Resume Optimizer & In-Browser Editor
+  • 4 Rewrite Modes: Conservative, Stronger, ATS Optimized, Recruiter Friendly
+  • Original vs. Suggested Improvements
+           ↓
+Click "Re-analyze Resume"
+           ↓
+Inspect Real "BEFORE vs AFTER" Score Simulation & Visual Diff
+```
+
+### 2. Recruiter Portal — Dynamic Requisitions & Multi-Resume Bulk Screening
+
+The recruiter portal requires **no predefined candidates**. Recruiters dynamically screen batches of candidate resumes against real requisitions:
+
+```
+Create Requisition & Paste Job Description
+           ↓
+Upload Multiple Resumes (PDF, DOC, DOCX - up to 50 files)
+           ↓
+Automatic SHA-256 Duplicate Resume Detection
+           ↓
+Click "Screen Candidates"
+           ↓
+Asynchronous Multi-Step Ingestion & Matching Pipeline
+  • Text & layout extraction
+  • Dynamic CandidateProfile generation
+  • Deterministic ontology & evidence matching
+           ↓
+Ranked Candidate Results & Filtering
+  • Advisory Recommendations: Strong Match, Potential Match, Needs Review, Low Match
+  • Filter by Score, Required Skills, Gaps, Experience, Learning Curve
+           ↓
+Deep Candidate Evidence Inspection
+  • Verbatim resume quotes & evidence citations
+  • Transferable skill mapping & learning curves
+           ↓
+Side-by-Side Candidate Comparison Matrix (2–4 Candidates)
+           ↓
+AI-Targeted Interview Questions Generation
+           ↓
+Export Screening Results to CSV
+```
+
+---
+
 ## 🏛️ System Architecture
 
 ```

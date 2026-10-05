@@ -44,13 +44,16 @@ graph TD
 - **Runtime**: Node.js with TypeScript and Express.js (`server.ts`).
 - **Middleware**:
   - Request logging with latency and request ID tracking.
+  - Multer multipart/form-data streaming for high-performance single and bulk resume uploads.
   - Input validation and prompt injection neutralization.
   - Error-shielding middleware converting exceptions to standard JSON error payloads.
 - **Service Layer**:
-  - `ResumeParserService`: Multi-format text extraction (PDF, DOCX, TXT) and structured entity extraction (Candidate, Experiences, Projects, Skills, Education).
-  - `SkillOntologyService`: Canonical mapping of 60+ skills, synonym aliasing, hierarchy trees, and transferability matrix.
-  - `MatchingService`: Mathematical composite scoring combining required skill coverage (35%), preferred skill coverage (15%), semantic similarity (20%), experience depth (15%), project evidence (10%), and domain alignment (5%).
-  - `ExplainabilityService`: Granular itemization of match status (`MATCH`, `PARTIAL`, `TRANSFERABLE`, `MISSING`) with direct evidence text citations.
+  - `documentParser.ts`: Real file parsing for PDF (`pdf-parse`), DOCX (`mammoth`), DOC, and TXT with Gemini 3.8 Flash multimodal OCR fallback. Extracts sections and checks for layout fragmentation (columns, tables, glyphs). Computes SHA-256 hashes for deduplication.
+  - `atsService.ts`: Computes 6-factor ATS Compatibility Score out of 100, detects formatting warnings, compiles verified strengths and weaknesses, builds skill gap analysis, and enforces ethical anti-fabrication keyword rules.
+  - `optimizationService.ts`: Generates rewrite suggestions across 4 modes (Conservative, Stronger, ATS Optimized, Recruiter Friendly) without hallucinating metrics, and computes real BEFORE vs AFTER score simulations with textual diffs.
+  - `screeningService.ts`: Orchestrates recruiter screening batches, bulk file ingestion, dynamic candidate creation (`CandidateProfile`), deterministic ranking, candidate side-by-side comparison, and CSV export.
+  - `matchingEngine.ts`: Mathematical composite scoring combining required skill coverage (35%), preferred skill coverage (15%), semantic similarity (20%), experience depth (15%), project evidence (10%), and domain alignment (5%).
+  - `skillOntology.ts`: Canonical mapping of 60+ skills, synonym aliasing, hierarchy trees, and transferability matrix.
   - `CopilotService`: Grounded LLM reasoning agent answering comparative candidate questions without hallucinations.
 
 ### 2.3 Data Layer

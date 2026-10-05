@@ -50,16 +50,113 @@ Confirms database readiness and AI provider configuration.
 
 ## 3. Resumes & Candidate Extraction
 
-### `POST /api/resumes/upload`
-Uploads and parses a candidate resume (PDF, DOCX, TXT) into structured entities.
-**Request:**
+### `POST /api/candidate/upload-and-analyze` (Multipart Form-Data)
+Uploads an actual resume document (PDF, DOC, DOCX, TXT) and target job parameters to run the complete analysis engine.
+**Form Fields:**
+- `resume`: File binary (PDF / DOC / DOCX / TXT)
+- `targetRole`: string (e.g. "Full Stack Developer")
+- `jobDescription`: string (Pasted JD text)
+
+**Response:**
+Returns `CandidateAnalysisResult` containing:
+- `overallScore`: number (composite 0-100)
+- `atsScore`: 6-category breakdown + format warnings
+- `matchResult`: evidence-first match results & verbatim quotes
+- `strengths`: verified candidate strengths
+- `weaknesses`: specific score loss factors
+- `skillGaps`: table of requirements vs evidence
+- `missingKeywords`: categorized as safe / indirect / undemonstrated
+- `improvementRoadmap`: prioritized high/medium/low impact steps
+- `optimizationSuggestions`: section-by-section improvements
+
+---
+
+### `POST /api/candidate/reanalyze` (JSON)
+Re-evaluates updated resume text from the in-browser editor and computes real BEFORE vs AFTER score changes.
+**Request Body:**
 ```json
 {
-  "filename": "Alex_Rivera_Resume.pdf",
-  "rawText": "Alex Rivera | AI/ML Engineer | Python, PyTorch, FastAPI...",
-  "candidateId": "cand-alex-1"
+  "previousAnalysisId": "analysis-12345",
+  "updatedResumeText": "Full updated text...",
+  "targetRole": "Senior Backend Engineer",
+  "jobDescription": "Full JD text..."
 }
 ```
+**Response:**
+```json
+{
+  "analysis": { ... },
+  "scoreComparison": {
+    "beforeOverall": 74,
+    "afterOverall": 84,
+    "beforeAts": 72,
+    "afterAts": 86,
+    "beforeSkill": 76,
+    "afterSkill": 84,
+    "deltas": {
+      "atsStructure": 8,
+      "keywordAlignment": 7,
+      "projectRelevance": 3,
+      "contentQuality": 4
+    },
+    "textDiffs": [ ... ]
+  }
+}
+```
+
+---
+
+### `POST /api/candidate/optimize` (JSON)
+Generates tailored suggestions for a specific rewrite mode (`conservative`, `stronger`, `ats_optimized`, `recruiter_friendly`).
+
+---
+
+### `GET /api/candidate/analyses`
+Returns past analysis sessions for the candidate.
+
+---
+
+## 4. Recruiter Bulk Screening Batches
+
+### `POST /api/recruiter/screening-batches`
+Creates a new screening session with requisition context.
+**Request Body:**
+```json
+{
+  "jobTitle": "Senior Backend Engineer",
+  "department": "Core Infrastructure",
+  "jobDescription": "Full job description text..."
+}
+```
+
+---
+
+### `POST /api/recruiter/screening-batches/:id/resumes` (Multipart Form-Data)
+Uploads and bulk screens multiple resume files (up to 50 files) in a batch.
+**Form Fields:**
+- `resumes`: Array of File binaries (PDF, DOCX, DOC, TXT)
+
+**Response:**
+Returns updated `ScreeningBatch` containing ranked candidates (`overallScore` descending), file hashes, duplicate warnings, and advisory recommendations (`Strong Match`, `Potential Match`, `Needs Review`, `Low Match`).
+
+---
+
+### `GET /api/recruiter/screening-batches`
+Lists all historical screening batches.
+
+---
+
+### `POST /api/recruiter/screening-batches/:id/compare`
+Compares 2–4 selected candidates side-by-side.
+
+---
+
+### `GET /api/recruiter/screening-batches/:id/export`
+Exports screened candidates to a standard CSV report.
+
+---
+
+## 5. Legacy & Hybrid Matching Engine
 **Response:**
 ```json
 {

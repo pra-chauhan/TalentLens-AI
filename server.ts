@@ -1,19 +1,215 @@
 import express from 'express';
 import path from 'path';
+import multer from 'multer';
 import { GoogleGenAI } from '@google/genai';
 import { DEMO_CANDIDATES, DEMO_JOBS, DEMO_RESUME_VERSIONS, DEMO_GITHUB_PROFILES } from './src/data/demoData';
 import { evaluateCandidateMatch, DEFAULT_WEIGHTS } from './src/utils/matchingEngine';
 import { normalizeSkill, CANONICAL_SKILLS } from './src/data/skillOntology';
-import { AuditLogEntry, CandidateProfile, JobQualityReport, JobRequisition, WhatIfWeights } from './src/types';
+import {
+  AuditLogEntry,
+  CandidateProfile,
+  JobQualityReport,
+  JobRequisition,
+  WhatIfWeights,
+  CandidateAnalysisResult,
+  RewriteMode,
+  ScoreComparisonDiff,
+  ScreeningBatch
+} from './src/types';
+import {
+  extractTextFromBuffer,
+  analyzeDocumentStructure,
+  buildDynamicCandidateProfile,
+  calculateFileHash,
+  segmentResumeSections
+} from './src/server/documentParser';
+import { analyzeAtsAndContent } from './src/server/atsService';
+import { generateResumeSuggestions, calculateTextDiffs } from './src/server/optimizationService';
+import {
+  screeningBatches,
+  createScreeningBatch,
+  buildJobRequisitionFromJd,
+  processResumeForBatch,
+  compareCandidates,
+  exportCandidatesCsv
+} from './src/server/screeningService';
 
 const app = express();
 const PORT = 3000;
 
-app.use(express.json({ limit: '15mb' }));
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+
+// Multer memory storage configuration for file uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 30 * 1024 * 1024 } // 30MB limit
+});
+
+// Candidate self-service analyses state
+const candidateAnalyses: Map<string, CandidateAnalysisResult> = new Map();
 
 // In-memory state initialized with production-grade demo seeds
 let jobs: JobRequisition[] = [...DEMO_JOBS];
 let candidates: CandidateProfile[] = [...DEMO_CANDIDATES];
+
+// Bootstrap initial screening batch and candidate analysis for seamless first-load inspection
+function bootstrapSeeds() {
+  const sampleResumeText = `Alex Chen
+San Francisco, CA • alexchen@example.com • github.com/alexchen-dev
+
+PROFESSIONAL SUMMARY
+Senior Software Engineer with 4.5 years of experience architecting distributed backend services, high-throughput microservices, and database query optimization with Python, FastAPI, Docker, and PostgreSQL. Proven track record of improving latency by 35% and scaling APIs to 50k requests per second.
+
+TECHNICAL SKILLS
+Languages: Python, TypeScript, SQL, Go, HTML5/CSS3
+Frameworks & Libraries: FastAPI, Flask, React, Node.js, Express, PyTorch
+Databases & Storage: PostgreSQL, Redis, MongoDB
+Cloud & DevOps: Docker, Kubernetes, AWS (S3, EC2), CI/CD, Git, Linux
+Architecture: RESTful APIs, Microservices, Event-Driven Architecture, GraphQL
+
+PROFESSIONAL EXPERIENCE
+Senior Backend Engineer — CloudScale Technologies (2022 - Present)
+- Architected and deployed microservices handling 45M daily API requests using Python, FastAPI, and PostgreSQL.
+- Optimized query execution plans and database connection pooling, reducing p99 response times from 340ms to 92ms.
+- Built automated container deployment pipelines using Docker and Kubernetes, cutting deploy lead times by 60%.
+- Integrated Redis cache layers for real-time leaderboards, mitigating database read spikes under peak traffic.
+
+Software Engineer — Nexus Media Labs (2020 - 2022)
+- Implemented REST APIs and background task workers using Python, Flask, Celery, and PostgreSQL.
+- Designed database schemas and migrated relational entities across production databases with zero downtime.
+- Collaborated across engineering and product teams to deliver responsive user dashboards in React and TypeScript.
+
+KEY PROJECTS
+Distributed Task Queue Engine (2023)
+- Engineered an asynchronous worker framework in Python and Redis supporting delayed task execution and exponential retry backoffs.
+- Published open-source package with 98% unit test coverage and automated GitHub Actions CI/CD.
+
+EDUCATION
+B.S. in Computer Science — University of California, Berkeley (2020)`;
+
+  const sampleJd = `Senior Backend Engineer
+Department: Core Infrastructure
+Location: Remote (US)
+
+About the Role:
+We are looking for an experienced Senior Backend Engineer to design, scale, and maintain high-throughput backend services and data pipelines.
+
+Requirements:
+- 3+ years of professional backend engineering experience with Python.
+- Strong hands-on experience with FastAPI or Flask, REST APIs, and microservices architecture.
+- Deep expertise in relational databases, particularly PostgreSQL (schema design, indexing, performance tuning).
+- Practical experience with Docker and containerized deployment workflows.
+- Familiarity with Redis caching and asynchronous queues.
+
+Preferred:
+- Experience with Kubernetes and AWS infrastructure.
+- Familiarity with TypeScript and modern frontend integration.`;
+
+  const jobReq = buildJobRequisitionFromJd('Senior Backend Engineer', 'Core Infrastructure', sampleJd);
+  const candProf = buildDynamicCandidateProfile(sampleResumeText, 'Alex_Chen_Resume.pdf', 101);
+  candProf.then(prof => {
+    const extractedDoc = {
+      rawText: sampleResumeText,
+      fileHash: calculateFileHash(Buffer.from(sampleResumeText)),
+      charCount: sampleResumeText.length,
+      wordCount: sampleResumeText.split(/\s+/).filter(Boolean).length,
+      sections: segmentResumeSections(sampleResumeText),
+      formattingSignals: analyzeDocumentStructure(sampleResumeText)
+    };
+    const match = evaluateCandidateMatch(prof, jobReq, DEFAULT_WEIGHTS);
+    const ats = analyzeAtsAndContent(prof, jobReq, extractedDoc, match);
+    const sug = generateResumeSuggestions(prof, jobReq, extractedDoc, 'ats_optimized');
+    sug.then(sugs => {
+      const seedAnalysis: CandidateAnalysisResult = {
+        id: 'analysis-seed-alex',
+        createdAt: new Date(Date.now() - 7200000).toISOString(),
+        resumeFilename: 'Alex_Chen_Resume.pdf',
+        fileSizeBytes: sampleResumeText.length,
+        fileType: 'application/pdf',
+        targetRole: 'Senior Backend Engineer',
+        jobDescription: sampleJd,
+        candidateProfile: prof,
+        matchResult: match,
+        atsScore: ats.atsScore,
+        qualityScore: ats.qualityScore,
+        overallScore: Math.round((match.overallScore * 0.55) + (ats.atsScore.overallScore * 0.45)),
+        overallVerdict: ats.overallVerdict,
+        strengths: ats.strengths,
+        weaknesses: ats.weaknesses,
+        skillGaps: ats.skillGaps,
+        missingKeywords: ats.missingKeywords,
+        experienceAnalysis: ats.experienceAnalysis,
+        projectAnalysis: ats.projectAnalysis,
+        achievementAnalysis: ats.achievementAnalysis,
+        improvementRoadmap: ats.improvementRoadmap,
+        optimizationSuggestions: sugs,
+        rawResumeText: sampleResumeText,
+        parsedSections: extractedDoc.sections.parsedSectionsDict
+      };
+      candidateAnalyses.set(seedAnalysis.id, seedAnalysis);
+    });
+  });
+
+  // Seed screening batch
+  const seedBatch = createScreeningBatch(
+    'u-recruiter-1',
+    'Senior Backend Engineer',
+    'Core Infrastructure',
+    sampleJd
+  );
+  seedBatch.id = 'batch-seed-eng-1';
+  seedBatch.status = 'COMPLETED';
+  seedBatch.totalResumes = 5;
+  seedBatch.processedResumes = 5;
+
+  const names = ['Jordan Lee', 'Morgan Taylor', 'Casey Rivera', 'Devon Kim', 'Samira Patel'];
+  const titles = ['Senior Backend Engineer', 'Full Stack Developer', 'Systems Software Engineer', 'Cloud Infrastructure Engineer', 'Data & Backend Engineer'];
+  const exps = [4.5, 3.2, 5.0, 2.8, 4.0];
+
+  seedBatch.candidates = names.map((name, i) => {
+    const anonId = `Candidate #R${100 + i}`;
+    const pText = `${name}\n${titles[i]}\nExperienced in Python, PostgreSQL, Docker, REST APIs, Redis with ${exps[i]} years experience.`;
+    const candP: CandidateProfile = {
+      id: `cand-seed-${i}`,
+      userId: `u-cand-seed-${i}`,
+      fullName: name,
+      anonymousId: anonId,
+      title: titles[i],
+      summary: `${titles[i]} with ${exps[i]} years experience in Python and cloud systems.`,
+      location: 'Remote',
+      yearsOfExperience: exps[i],
+      education: [{ id: `edu-${i}`, degree: 'B.S. Computer Science', fieldOfStudy: 'Computer Science', institution: 'University', graduationYear: 2020 }],
+      experiences: [{ id: `exp-${i}`, company: 'Tech Inc', title: titles[i], startDate: '2021', endDate: 'Present', location: 'Remote', description: 'Engineered backend systems', skillsUsed: ['Python', 'PostgreSQL', 'Docker'], keyAchievements: ['Reduced latency by 25%'] }],
+      projects: [{ id: `proj-${i}`, title: 'High Throughput API', description: 'Built REST service with Python', role: 'Lead Developer', skillsUsed: ['Python', 'Docker', 'FastAPI'] }],
+      skills: [
+        { skill: 'Python', category: 'Programming Languages', confidence: 0.95, source: 'experience', evidence: 'Verified Python experience', recency: 'recent', depth: 'production' },
+        { skill: 'PostgreSQL', category: 'Databases & Storage', confidence: 0.90, source: 'experience', evidence: 'Verified PostgreSQL schema work', recency: 'recent', depth: 'production' },
+        { skill: 'Docker', category: 'Cloud & DevOps', confidence: i < 3 ? 0.90 : 0.65, source: 'project', evidence: 'Container deployment', recency: 'recent', depth: 'production' },
+        { skill: 'FastAPI', category: 'Frameworks & Libraries', confidence: 0.88, source: 'experience', evidence: 'FastAPI microservices', recency: 'recent', depth: 'production' }
+      ],
+      certifications: []
+    };
+    const m = evaluateCandidateMatch(candP, jobReq, DEFAULT_WEIGHTS);
+    return {
+      id: `sc-seed-${i}`,
+      candidateId: candP.id,
+      resumeFilename: `${name.replace(/\s+/g, '_')}_Resume.pdf`,
+      candidateName: name,
+      anonymousId: anonId,
+      title: titles[i],
+      matchResult: m,
+      candidateProfile: candP,
+      recommendation: m.overallScore >= 80 ? 'Strong Match' : m.overallScore >= 70 ? 'Potential Match' : 'Needs Review',
+      fileHash: `hash-seed-${i}`,
+      uploadedAt: new Date(Date.now() - 3600000 * (i + 1)).toISOString()
+    };
+  });
+  seedBatch.candidates.sort((a, b) => b.matchResult.overallScore - a.matchResult.overallScore);
+  screeningBatches.set(seedBatch.id, seedBatch);
+}
+
+bootstrapSeeds();
 const auditLogs: AuditLogEntry[] = [
   {
     id: 'log-init-1',
@@ -589,6 +785,451 @@ app.post('/api/audit', (req, res) => {
   };
   auditLogs.unshift(newEntry);
   res.status(201).json(newEntry);
+});
+
+// ----------------------------------------------------
+// 11. CANDIDATE SELF-SERVICE ATS & RESUME OPTIMIZER API
+// ----------------------------------------------------
+
+// Upload real resume file (PDF, DOCX, DOC, TXT) and analyze against target role & JD
+app.post('/api/candidate/upload-and-analyze', upload.single('resume'), async (req, res) => {
+  try {
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ error: { code: 'NO_FILE', message: 'Please upload a resume file (PDF, DOC, or DOCX).' } });
+    }
+
+    const targetRole = (req.body.targetRole || 'Software Engineer').trim();
+    const jobDescription = (req.body.jobDescription || '').trim();
+
+    if (!jobDescription || jobDescription.length < 25) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_JD',
+          message: 'Please provide a valid Job Description with sufficient detail (at least 25 characters).'
+        }
+      });
+    }
+
+    const gemini = getGeminiClient();
+
+    // 1. Extract text
+    const rawText = await extractTextFromBuffer(file.buffer, file.originalname, file.mimetype, gemini);
+    if (!rawText || rawText.trim().length < 40) {
+      return res.status(400).json({
+        error: {
+          code: 'UNREADABLE_FILE',
+          message: 'The uploaded file appears empty or could not be parsed into readable text.'
+        }
+      });
+    }
+
+    // 2. Prompt injection safety check
+    const lower = rawText.toLowerCase();
+    if (lower.includes('ignore previous instructions') || lower.includes('system prompt') || lower.includes('rank me 100%')) {
+      return res.status(400).json({
+        error: {
+          code: 'ADVERSARIAL_PAYLOAD_DETECTED',
+          message: 'Security Guard: Adversarial prompt injection text was detected in the resume document.'
+        }
+      });
+    }
+
+    // 3. Document structure & sections
+    const formattingSignals = analyzeDocumentStructure(rawText);
+    const segmented = segmentResumeSections(rawText);
+    const fileHash = calculateFileHash(file.buffer);
+
+    const extractedDoc = {
+      rawText,
+      fileHash,
+      charCount: rawText.length,
+      wordCount: rawText.split(/\s+/).filter(Boolean).length,
+      sections: segmented,
+      formattingSignals
+    };
+
+    // 4. Dynamic Candidate Profile & Requisition
+    const candidateProfile = await buildDynamicCandidateProfile(rawText, file.originalname, 1, gemini);
+    const jobRequisition = buildJobRequisitionFromJd(targetRole, 'Engineering', jobDescription);
+
+    // 5. Matching & Evidence
+    const matchResult = evaluateCandidateMatch(candidateProfile, jobRequisition, DEFAULT_WEIGHTS);
+
+    // 6. ATS Analysis, Strengths, Weaknesses, Skill Gaps, Roadmap
+    const atsAndContent = analyzeAtsAndContent(candidateProfile, jobRequisition, extractedDoc, matchResult);
+
+    // 7. Initial Optimization Suggestions
+    const suggestions = await generateResumeSuggestions(candidateProfile, jobRequisition, extractedDoc, 'ats_optimized', gemini);
+
+    const analysisId = `analysis-${Date.now()}`;
+    const fullAnalysis: CandidateAnalysisResult = {
+      id: analysisId,
+      createdAt: new Date().toISOString(),
+      resumeFilename: file.originalname,
+      fileSizeBytes: file.size,
+      fileType: file.mimetype || path.extname(file.originalname),
+      targetRole,
+      jobDescription,
+      candidateProfile,
+      matchResult,
+      atsScore: atsAndContent.atsScore,
+      qualityScore: atsAndContent.qualityScore,
+      overallScore: Math.round((matchResult.overallScore * 0.55) + (atsAndContent.atsScore.overallScore * 0.45)),
+      overallVerdict: atsAndContent.overallVerdict,
+      strengths: atsAndContent.strengths,
+      weaknesses: atsAndContent.weaknesses,
+      skillGaps: atsAndContent.skillGaps,
+      missingKeywords: atsAndContent.missingKeywords,
+      experienceAnalysis: atsAndContent.experienceAnalysis,
+      projectAnalysis: atsAndContent.projectAnalysis,
+      achievementAnalysis: atsAndContent.achievementAnalysis,
+      improvementRoadmap: atsAndContent.improvementRoadmap,
+      optimizationSuggestions: suggestions,
+      rawResumeText: rawText,
+      parsedSections: segmented.parsedSectionsDict
+    };
+
+    candidateAnalyses.set(analysisId, fullAnalysis);
+
+    // Add to in-memory candidate list for cross-portal visibility if needed
+    candidates.unshift(candidateProfile);
+
+    auditLogs.unshift({
+      id: `log-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      userId: 'u-candidate-self',
+      userRole: 'CANDIDATE',
+      action: 'RESUME_ANALYSIS_COMPLETED',
+      resourceType: 'RESUME_ANALYSIS',
+      resourceId: analysisId,
+      details: `Analyzed resume "${file.originalname}" against target role "${targetRole}". ATS: ${atsAndContent.atsScore.overallScore}/100, Match: ${matchResult.overallScore}%.`
+    });
+
+    res.status(201).json(fullAnalysis);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error analyzing resume';
+    console.error('Resume analysis error:', err);
+    res.status(500).json({ error: { code: 'ANALYSIS_FAILED', message: msg } });
+  }
+});
+
+// Re-analyze updated resume content (Score Simulator & Before vs After comparison)
+app.post('/api/candidate/reanalyze', async (req, res) => {
+  try {
+    const { previousAnalysisId, updatedResumeText, targetRole, jobDescription } = req.body;
+    const prev = candidateAnalyses.get(previousAnalysisId);
+
+    const resumeTextToUse = (updatedResumeText || (prev ? prev.rawResumeText : '')).trim();
+    if (!resumeTextToUse || resumeTextToUse.length < 30) {
+      return res.status(400).json({ error: { code: 'EMPTY_TEXT', message: 'Updated resume content is too short to analyze.' } });
+    }
+
+    const effectiveRole = targetRole || (prev ? prev.targetRole : 'Software Engineer');
+    const effectiveJd = jobDescription || (prev ? prev.jobDescription : 'Software Engineer with modern technical capabilities');
+
+    const gemini = getGeminiClient();
+    const formattingSignals = analyzeDocumentStructure(resumeTextToUse);
+    const segmented = segmentResumeSections(resumeTextToUse);
+
+    const extractedDoc = {
+      rawText: resumeTextToUse,
+      fileHash: calculateFileHash(Buffer.from(resumeTextToUse)),
+      charCount: resumeTextToUse.length,
+      wordCount: resumeTextToUse.split(/\s+/).filter(Boolean).length,
+      sections: segmented,
+      formattingSignals
+    };
+
+    const candidateProfile = await buildDynamicCandidateProfile(resumeTextToUse, prev?.resumeFilename || 'resume_v2.txt', 2, gemini);
+    const jobRequisition = buildJobRequisitionFromJd(effectiveRole, 'Engineering', effectiveJd);
+
+    const matchResult = evaluateCandidateMatch(candidateProfile, jobRequisition, DEFAULT_WEIGHTS);
+    const atsAndContent = analyzeAtsAndContent(candidateProfile, jobRequisition, extractedDoc, matchResult);
+    const newSuggestions = await generateResumeSuggestions(candidateProfile, jobRequisition, extractedDoc, 'ats_optimized', gemini);
+
+    const newAnalysisId = `analysis-${Date.now()}`;
+    const afterOverall = Math.round((matchResult.overallScore * 0.55) + (atsAndContent.atsScore.overallScore * 0.45));
+    const afterAts = atsAndContent.atsScore.overallScore;
+    const afterSkill = matchResult.breakdown.requiredCoverage;
+    const afterExperience = matchResult.breakdown.experienceCompatibility;
+
+    const beforeOverall = prev ? prev.overallScore : Math.max(50, afterOverall - 10);
+    const beforeAts = prev ? prev.atsScore.overallScore : Math.max(50, atsAndContent.atsScore.overallScore - 12);
+    const beforeSkill = prev ? prev.matchResult.breakdown.requiredCoverage : Math.max(50, matchResult.breakdown.requiredCoverage - 8);
+    const beforeExperience = prev ? prev.matchResult.breakdown.experienceCompatibility : matchResult.breakdown.experienceCompatibility;
+
+    const textDiffs = calculateTextDiffs(
+      prev?.parsedSections || {},
+      segmented.parsedSectionsDict
+    );
+
+    const scoreComparison: ScoreComparisonDiff = {
+      beforeOverall,
+      afterOverall,
+      beforeAts,
+      afterAts,
+      beforeSkill,
+      afterSkill,
+      beforeExperience,
+      afterExperience,
+      deltas: {
+        atsStructure: Math.max(0, atsAndContent.atsScore.resumeStructure - (prev ? prev.atsScore.resumeStructure : 6)),
+        keywordAlignment: Math.max(0, atsAndContent.atsScore.keywordAlignment - (prev ? prev.atsScore.keywordAlignment : 12)),
+        projectRelevance: Math.max(0, Math.round((matchResult.breakdown.projectEvidenceScore - (prev ? prev.matchResult.breakdown.projectEvidenceScore : 60)) / 10)),
+        contentQuality: Math.max(0, atsAndContent.qualityScore.contentQuality - (prev ? prev.qualityScore.contentQuality : 70))
+      },
+      textDiffs
+    };
+
+    const updatedAnalysis: CandidateAnalysisResult = {
+      id: newAnalysisId,
+      createdAt: new Date().toISOString(),
+      resumeFilename: prev ? `${prev.resumeFilename.replace(/\.[^/.]+$/, '')}_optimized.pdf` : 'resume_optimized.pdf',
+      fileSizeBytes: resumeTextToUse.length,
+      fileType: 'application/pdf',
+      targetRole: effectiveRole,
+      jobDescription: effectiveJd,
+      candidateProfile,
+      matchResult,
+      atsScore: atsAndContent.atsScore,
+      qualityScore: atsAndContent.qualityScore,
+      overallScore: afterOverall,
+      overallVerdict: atsAndContent.overallVerdict,
+      strengths: atsAndContent.strengths,
+      weaknesses: atsAndContent.weaknesses,
+      skillGaps: atsAndContent.skillGaps,
+      missingKeywords: atsAndContent.missingKeywords,
+      experienceAnalysis: atsAndContent.experienceAnalysis,
+      projectAnalysis: atsAndContent.projectAnalysis,
+      achievementAnalysis: atsAndContent.achievementAnalysis,
+      improvementRoadmap: atsAndContent.improvementRoadmap,
+      optimizationSuggestions: newSuggestions,
+      rawResumeText: resumeTextToUse,
+      parsedSections: segmented.parsedSectionsDict
+    };
+
+    candidateAnalyses.set(newAnalysisId, updatedAnalysis);
+
+    auditLogs.unshift({
+      id: `log-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      userId: 'u-candidate-self',
+      userRole: 'CANDIDATE',
+      action: 'RESUME_REANALYZED',
+      resourceType: 'RESUME_ANALYSIS',
+      resourceId: newAnalysisId,
+      details: `Re-analyzed resume. Score shifted: ATS ${beforeAts} -> ${afterAts}, Overall ${beforeOverall} -> ${afterOverall}.`
+    });
+
+    res.json({
+      analysis: updatedAnalysis,
+      scoreComparison
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error re-analyzing resume';
+    res.status(500).json({ error: { code: 'REANALYZE_FAILED', message: msg } });
+  }
+});
+
+// Generate optimization suggestions for specific mode ('conservative' | 'stronger' | 'ats_optimized' | 'recruiter_friendly')
+app.post('/api/candidate/optimize', async (req, res) => {
+  try {
+    const { analysisId, mode } = req.body as { analysisId: string; mode: RewriteMode };
+    const analysis = candidateAnalyses.get(analysisId);
+    if (!analysis) {
+      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Analysis not found' } });
+    }
+
+    const gemini = getGeminiClient();
+    const extractedDoc = {
+      rawText: analysis.rawResumeText,
+      fileHash: calculateFileHash(Buffer.from(analysis.rawResumeText)),
+      charCount: analysis.rawResumeText.length,
+      wordCount: analysis.rawResumeText.split(/\s+/).filter(Boolean).length,
+      sections: segmentResumeSections(analysis.rawResumeText),
+      formattingSignals: analyzeDocumentStructure(analysis.rawResumeText)
+    };
+
+    const suggestions = await generateResumeSuggestions(
+      analysis.candidateProfile,
+      buildJobRequisitionFromJd(analysis.targetRole, 'Engineering', analysis.jobDescription),
+      extractedDoc,
+      mode || 'ats_optimized',
+      gemini
+    );
+
+    res.json({ suggestions, mode });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Optimization error';
+    res.status(500).json({ error: { code: 'OPTIMIZE_FAILED', message: msg } });
+  }
+});
+
+// List saved candidate analyses
+app.get('/api/candidate/analyses', (req, res) => {
+  const list = Array.from(candidateAnalyses.values()).map(a => ({
+    id: a.id,
+    createdAt: a.createdAt,
+    resumeFilename: a.resumeFilename,
+    targetRole: a.targetRole,
+    overallScore: a.overallScore,
+    atsScore: a.atsScore.overallScore,
+    candidateName: a.candidateProfile.fullName
+  }));
+  res.json(list);
+});
+
+// Get specific candidate analysis
+app.get('/api/candidate/analyses/:id', (req, res) => {
+  const analysis = candidateAnalyses.get(req.params.id);
+  if (!analysis) {
+    return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Analysis not found' } });
+  }
+  res.json(analysis);
+});
+
+// ----------------------------------------------------
+// 12. RECRUITER SCREENING BATCHES & BULK SCREENING API
+// ----------------------------------------------------
+
+// Create a new screening batch
+app.post('/api/recruiter/screening-batches', (req, res) => {
+  const { jobTitle, department, jobDescription } = req.body;
+  if (!jobDescription || jobDescription.trim().length < 25) {
+    return res.status(400).json({ error: { code: 'INVALID_JD', message: 'Please provide a meaningful Job Description.' } });
+  }
+
+  const batch = createScreeningBatch('u-recruiter-1', jobTitle || 'Software Engineer', department || 'Engineering', jobDescription);
+
+  auditLogs.unshift({
+    id: `log-${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    userId: 'u-recruiter-1',
+    userRole: 'RECRUITER',
+    action: 'SCREENING_BATCH_CREATED',
+    resourceType: 'SCREENING_BATCH',
+    resourceId: batch.id,
+    details: `Created candidate screening batch for "${batch.jobTitle}" in ${batch.department}.`
+  });
+
+  res.status(201).json(batch);
+});
+
+// Bulk upload and process resumes for a screening batch
+app.post('/api/recruiter/screening-batches/:id/resumes', upload.array('resumes', 50), async (req, res) => {
+  try {
+    const batchId = req.params.id;
+    const batch = screeningBatches.get(batchId);
+    if (!batch) {
+      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Screening batch not found' } });
+    }
+
+    const files = req.files as Express.Multer.File[];
+    if (!files || files.length === 0) {
+      return res.status(400).json({ error: { code: 'NO_FILES', message: 'Please upload at least one resume file.' } });
+    }
+
+    batch.status = 'PROCESSING';
+    batch.totalResumes = files.length;
+    batch.processedResumes = 0;
+    batch.failedResumes = 0;
+
+    const gemini = getGeminiClient();
+    const processedCandidates = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      try {
+        const record = await processResumeForBatch(
+          batchId,
+          file.buffer,
+          file.originalname,
+          file.mimetype,
+          i + 1,
+          gemini
+        );
+        batch.candidates.push(record);
+        processedCandidates.push(record);
+        batch.processedResumes++;
+      } catch (err: unknown) {
+        console.warn(`Failed processing resume "${file.originalname}":`, err);
+        batch.failedResumes++;
+      }
+    }
+
+    // Rank candidates by overallScore descending
+    batch.candidates.sort((a, b) => b.matchResult.overallScore - a.matchResult.overallScore);
+    batch.status = 'COMPLETED';
+
+    auditLogs.unshift({
+      id: `log-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      userId: 'u-recruiter-1',
+      userRole: 'RECRUITER',
+      action: 'BATCH_SCREENING_COMPLETED',
+      resourceType: 'SCREENING_BATCH',
+      resourceId: batchId,
+      details: `Screened ${batch.processedResumes} candidates for role "${batch.jobTitle}". Top match: ${batch.candidates[0]?.candidateName || 'N/A'} (${batch.candidates[0]?.matchResult.overallScore || 0}%).`
+    });
+
+    res.json(batch);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error screening resumes';
+    res.status(500).json({ error: { code: 'SCREENING_FAILED', message: msg } });
+  }
+});
+
+// List all screening batches (Screening History)
+app.get('/api/recruiter/screening-batches', (req, res) => {
+  const list = Array.from(screeningBatches.values()).map(b => ({
+    id: b.id,
+    jobTitle: b.jobTitle,
+    department: b.department,
+    createdAt: b.createdAt,
+    status: b.status,
+    totalResumes: b.totalResumes,
+    processedResumes: b.processedResumes,
+    failedResumes: b.failedResumes,
+    topScore: b.candidates[0]?.matchResult.overallScore || 0
+  }));
+  res.json(list);
+});
+
+// Get details of a specific screening batch
+app.get('/api/recruiter/screening-batches/:id', (req, res) => {
+  const batch = screeningBatches.get(req.params.id);
+  if (!batch) {
+    return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Screening batch not found' } });
+  }
+  res.json(batch);
+});
+
+// Compare selected candidates in a screening batch
+app.post('/api/recruiter/screening-batches/:id/compare', (req, res) => {
+  const batch = screeningBatches.get(req.params.id);
+  if (!batch) {
+    return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Screening batch not found' } });
+  }
+
+  const { candidateIds } = req.body as { candidateIds: string[] };
+  const selected = batch.candidates.filter(c => candidateIds.includes(c.candidateId));
+
+  const comparison = compareCandidates(selected);
+  res.json(comparison);
+});
+
+// Export candidates to CSV
+app.get('/api/recruiter/screening-batches/:id/export', (req, res) => {
+  const batch = screeningBatches.get(req.params.id);
+  if (!batch) {
+    return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Screening batch not found' } });
+  }
+
+  const csv = exportCandidatesCsv(batch.candidates);
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename="candidates_${batch.jobTitle.replace(/\s+/g, '_')}_${batch.id}.csv"`);
+  res.send(csv);
 });
 
 // ----------------------------------------------------

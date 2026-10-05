@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
-import { RecruiterDashboard } from './components/RecruiterDashboard';
-import { CandidateDashboard } from './components/CandidateDashboard';
+import { RecruiterPortal } from './components/recruiter/RecruiterPortal';
+import { CandidatePortal } from './components/candidate/CandidatePortal';
 import { PublicLanding } from './components/PublicLanding';
 import { AuditLogsModal } from './components/AuditLogsModal';
 import { Sparkles, ShieldCheck, Activity } from 'lucide-react';
 
 export default function App() {
-  const [activeView, setActiveView] = useState<'recruiter' | 'candidate' | 'landing' | 'audit'>('recruiter');
+  const [activeView, setActiveView] = useState<'recruiter' | 'candidate' | 'landing' | 'audit'>('candidate');
   const [blindScreening, setBlindScreening] = useState<boolean>(true);
   const [showAuditModal, setShowAuditModal] = useState<boolean>(false);
   const [systemHealthy, setSystemHealthy] = useState<boolean>(true);
@@ -46,14 +46,14 @@ export default function App() {
         )}
 
         {activeView === 'recruiter' && (
-          <RecruiterDashboard
+          <RecruiterPortal
             blindScreening={blindScreening}
             setBlindScreening={setBlindScreening}
           />
         )}
 
         {activeView === 'candidate' && (
-          <CandidateDashboard />
+          <CandidatePortal />
         )}
       </main>
 

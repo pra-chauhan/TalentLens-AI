@@ -248,8 +248,212 @@ export interface AuditLogEntry {
   userId: string;
   userRole: UserRole;
   action: string;
-  resourceType: 'CANDIDATE' | 'JOB' | 'MATCH' | 'WHAT_IF' | 'INTERVIEW' | 'BLIND_SCREENING';
+  resourceType: 'CANDIDATE' | 'JOB' | 'MATCH' | 'WHAT_IF' | 'INTERVIEW' | 'BLIND_SCREENING' | 'RESUME_ANALYSIS' | 'SCREENING_BATCH';
   resourceId: string;
   details: string;
   parametersLogged?: Record<string, unknown>;
+}
+
+// ----------------------------------------------------
+// CANDIDATE PORTAL: ATS & SELF-SERVICE ANALYZER TYPES
+// ----------------------------------------------------
+
+export interface ATSFormatWarning {
+  id: string;
+  type: 'layout' | 'typography' | 'tables' | 'headings' | 'graphics' | 'length';
+  severity: 'high' | 'medium' | 'low';
+  warning: string;
+  recommendation: string;
+}
+
+export interface SectionAnalysisItem {
+  sectionName: 'Professional Summary' | 'Skills' | 'Experience' | 'Projects' | 'Education' | 'Certifications' | 'Achievements';
+  status: 'present' | 'missing' | 'weak' | 'strong';
+  notes: string;
+  recommendation?: string;
+}
+
+export interface ATSCategoryScore {
+  category: string;
+  score: number;
+  maxScore: number;
+  label: string;
+}
+
+export interface ATSAnalysisResult {
+  overallScore: number; // e.g. 78 out of 100
+  parsingCompatibility: number; // out of 20
+  keywordAlignment: number; // out of 25
+  skillsAlignment: number; // out of 20
+  experienceAlignment: number; // out of 15
+  resumeStructure: number; // out of 10
+  jobRelevance: number; // out of 10
+  formatWarnings: ATSFormatWarning[];
+  sectionAnalysis: SectionAnalysisItem[];
+  disclaimer: string;
+}
+
+export interface SkillGapItem {
+  skill: string;
+  jdRequirement: 'Required' | 'Preferred';
+  resumeEvidence: 'Strong' | 'Project' | 'Coursework' | 'Transferable' | 'None';
+  status: 'MATCH' | 'TRANSFERABLE' | 'PARTIAL' | 'MISSING';
+  priority: 'High' | 'Medium' | 'Low';
+  evidenceQuote?: string;
+  transferRationale?: string;
+}
+
+export interface MissingKeywordItem {
+  keyword: string;
+  category: 'Already demonstrated' | 'Demonstrated indirectly' | 'Not demonstrated';
+  recommendation: string;
+  safeToAdd: boolean;
+}
+
+export interface ExperienceAnalysisItem {
+  jobRequiredYears: number;
+  documentedRelevantYears: number;
+  experienceAlignmentPercentage: number;
+  seniorityFit: 'Under' | 'Target' | 'Over' | 'Aligned';
+  domainRelevance: string;
+  recencyNote: string;
+}
+
+export interface ProjectAnalysisItem {
+  title: string;
+  relevance: 'HIGH' | 'MEDIUM' | 'LOW';
+  evidenceQuality: 'STRONG' | 'MODERATE' | 'WEAK';
+  technologies: string[];
+  demonstratedSkills: string[];
+  measurableOutcomes: string[];
+  critique: string;
+}
+
+export interface AchievementAnalysisItem {
+  hasQuantifiedImpact: boolean;
+  quantifiedCount: number;
+  weakBulletCount: number;
+  templateRecommendation: string;
+  bulletCritiques: {
+    originalBullet: string;
+    suggestion: string;
+    hasMetrics: boolean;
+  }[];
+}
+
+export interface ResumeQualityResult {
+  contentQuality: number; // 0-100
+  clarity: number;
+  impact: number;
+  relevance: number;
+  technicalEvidence: number;
+  achievementStrength: number;
+  consistency: number;
+  readability: number;
+}
+
+export interface ImprovementRoadmapItem {
+  priority: number; // 1, 2, 3...
+  impact: 'High Impact' | 'Medium Impact' | 'Low Impact';
+  title: string;
+  description: string;
+  actionableStep: string;
+}
+
+export type RewriteMode = 'conservative' | 'stronger' | 'ats_optimized' | 'recruiter_friendly';
+
+export interface ResumeOptimizationSuggestion {
+  id: string;
+  section: 'Summary' | 'Skills' | 'Experience' | 'Projects' | 'Achievements' | 'Certifications';
+  original: string;
+  suggested: string;
+  mode: RewriteMode;
+  rationale: string;
+}
+
+export interface CandidateAnalysisResult {
+  id: string;
+  createdAt: string;
+  resumeFilename: string;
+  fileSizeBytes: number;
+  fileType: string;
+  targetRole: string;
+  jobDescription: string;
+  candidateProfile: CandidateProfile;
+  matchResult: CandidateMatchResult;
+  atsScore: ATSAnalysisResult;
+  qualityScore: ResumeQualityResult;
+  overallScore: number;
+  overallVerdict: string;
+  strengths: string[];
+  weaknesses: string[];
+  skillGaps: SkillGapItem[];
+  missingKeywords: MissingKeywordItem[];
+  experienceAnalysis: ExperienceAnalysisItem;
+  projectAnalysis: ProjectAnalysisItem[];
+  achievementAnalysis: AchievementAnalysisItem;
+  improvementRoadmap: ImprovementRoadmapItem[];
+  optimizationSuggestions: ResumeOptimizationSuggestion[];
+  rawResumeText: string;
+  parsedSections: Record<string, string>;
+}
+
+export interface ScoreComparisonDiff {
+  beforeOverall: number;
+  afterOverall: number;
+  beforeAts: number;
+  afterAts: number;
+  beforeSkill: number;
+  afterSkill: number;
+  beforeExperience: number;
+  afterExperience: number;
+  deltas: {
+    atsStructure: number;
+    keywordAlignment: number;
+    projectRelevance: number;
+    contentQuality: number;
+  };
+  textDiffs: {
+    section: string;
+    added: string[];
+    removed: string[];
+    modified: { before: string; after: string }[];
+  }[];
+}
+
+// ----------------------------------------------------
+// RECRUITER PORTAL: SCREENING BATCH TYPES
+// ----------------------------------------------------
+
+export type RecruiterRecommendation = 'Strong Match' | 'Potential Match' | 'Needs Review' | 'Low Match';
+
+export interface ScreeningCandidateRecord {
+  id: string;
+  candidateId: string;
+  resumeFilename: string;
+  candidateName: string;
+  anonymousId: string;
+  title: string;
+  matchResult: CandidateMatchResult;
+  candidateProfile: CandidateProfile;
+  recommendation: RecruiterRecommendation;
+  fileHash: string;
+  uploadedAt: string;
+}
+
+export interface ScreeningBatch {
+  id: string;
+  recruiterId: string;
+  jobTitle: string;
+  department: string;
+  jobDescription: string;
+  createdAt: string;
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  totalResumes: number;
+  processedResumes: number;
+  failedResumes: number;
+  duplicatesDetected: string[];
+  candidates: ScreeningCandidateRecord[];
+  jdRequirementsCount: number;
+  jdQualityScore?: number;
 }
