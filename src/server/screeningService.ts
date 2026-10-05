@@ -26,9 +26,10 @@ export function createScreeningBatch(
   recruiterId: string,
   jobTitle: string,
   department: string,
-  jobDescription: string
+  jobDescription: string,
+  customBatchId?: string
 ): ScreeningBatch {
-  const batchId = `batch-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const batchId = customBatchId || `batch-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
 
   const batch: ScreeningBatch = {
     id: batchId,

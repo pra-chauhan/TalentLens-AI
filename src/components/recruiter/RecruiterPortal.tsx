@@ -36,7 +36,9 @@ import {
   Trash2,
   RefreshCw,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  LayoutGrid,
+  List
 } from 'lucide-react';
 
 interface RecruiterPortalProps {
@@ -89,11 +91,19 @@ Preferred:
   const [screeningHistory, setScreeningHistory] = useState<any[]>([]);
 
   // Search & Filter State
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [searchQuery, setSearchQuery] = useState('');
   const [minScoreFilter, setMinScoreFilter] = useState(0);
   const [minExpFilter, setMinExpFilter] = useState(0);
   const [learningDistanceFilter, setLearningDistanceFilter] = useState('ALL');
   const [recommendationFilter, setRecommendationFilter] = useState('ALL');
+  const [requiredSkillFilter, setRequiredSkillFilter] = useState('ALL');
+  const [missingSkillFilter, setMissingSkillFilter] = useState('ALL');
+  const [seniorityFilter, setSeniorityFilter] = useState('ALL');
+  const [evidenceStrengthFilter, setEvidenceStrengthFilter] = useState('ALL');
+  const [transferableFilter, setTransferableFilter] = useState(false);
+  const [educationFilter, setEducationFilter] = useState('ALL');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   // Candidate Comparison State (selected candidate IDs)
   const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
@@ -316,12 +326,17 @@ Preferred:
         createdAt: new Date().toISOString().split('T')[0]
       };
 
+  const availableRequiredSkills = Array.from(
+    new Set((currentBatch?.candidates || []).flatMap(c => [...c.matchResult.matchedRequiredSkills, ...c.matchResult.missingRequiredSkills]))
+  ).sort();
+
   // Filter candidates in current batch
   const filteredCandidates = (currentBatch?.candidates || []).filter(c => {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const nameMatch = c.candidateName.toLowerCase().includes(q) || c.anonymousId.toLowerCase().includes(q);
-      const skillMatch = c.matchResult.matchedRequiredSkills.some(s => s.toLowerCase().includes(q));
+      const skillMatch = c.matchResult.matchedRequiredSkills.some(s => s.toLowerCase().includes(q)) ||
+        c.candidateProfile.skills.some(s => s.skill.toLowerCase().includes(q));
       if (!nameMatch && !skillMatch) return false;
     }
     if (minScoreFilter > 0 && c.matchResult.overallScore < minScoreFilter) {
@@ -335,6 +350,27 @@ Preferred:
     }
     if (recommendationFilter !== 'ALL' && c.recommendation !== recommendationFilter) {
       return false;
+    }
+    if (requiredSkillFilter !== 'ALL' && !c.matchResult.matchedRequiredSkills.includes(requiredSkillFilter)) {
+      return false;
+    }
+    if (missingSkillFilter !== 'ALL' && !c.matchResult.missingRequiredSkills.includes(missingSkillFilter)) {
+      return false;
+    }
+    if (seniorityFilter !== 'ALL') {
+      const exp = c.candidateProfile.yearsOfExperience;
+      const sen = exp >= 5 ? 'Senior' : exp >= 2 ? 'Mid' : 'Junior';
+      if (sen !== seniorityFilter) return false;
+    }
+    if (evidenceStrengthFilter !== 'ALL' && c.matchResult.evidenceStrength !== evidenceStrengthFilter) {
+      return false;
+    }
+    if (transferableFilter && (!c.matchResult.transferableSkills || c.matchResult.transferableSkills.length === 0)) {
+      return false;
+    }
+    if (educationFilter !== 'ALL') {
+      const hasEdu = c.candidateProfile.education.some(e => e.degree.toLowerCase().includes(educationFilter.toLowerCase()));
+      if (!hasEdu) return false;
     }
     return true;
   });
@@ -704,61 +740,150 @@ Preferred:
           </div>
 
           {/* Search & Filter Bar */}
-          <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-3 text-xs">
-            <div className="relative flex-1 w-full md:w-auto">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Filter by name, ID, or skill (e.g. Python, Docker, PostgreSQL)..."
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500"
-              />
+          <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3 text-xs">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-3">
+              <div className="relative flex-1 w-full md:w-auto">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Filter by name, ID, or skill (e.g. Python, Docker, PostgreSQL)..."
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto justify-end">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-400">Min Score:</span>
+                  <select
+                    value={minScoreFilter}
+                    onChange={e => setMinScoreFilter(Number(e.target.value))}
+                    className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none"
+                  >
+                    <option value="0">All Scores</option>
+                    <option value="70">70%+</option>
+                    <option value="80">80%+</option>
+                    <option value="90">90%+</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-400">Recommendation:</span>
+                  <select
+                    value={recommendationFilter}
+                    onChange={e => setRecommendationFilter(e.target.value)}
+                    className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none"
+                  >
+                    <option value="ALL">All Categories</option>
+                    <option value="Strong Match">Strong Match</option>
+                    <option value="Potential Match">Potential Match</option>
+                    <option value="Needs Review">Needs Review</option>
+                    <option value="Low Match">Low Match</option>
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-1.5 transition ${
+                    showAdvancedFilters || requiredSkillFilter !== 'ALL' || missingSkillFilter !== 'ALL' || seniorityFilter !== 'ALL' || evidenceStrengthFilter !== 'ALL' || transferableFilter || educationFilter !== 'ALL'
+                      ? 'bg-indigo-950 text-indigo-300 border-indigo-700/60'
+                      : 'bg-slate-800 text-slate-300 border-slate-700 hover:text-white'
+                  }`}
+                >
+                  <Filter className="w-3.5 h-3.5" />
+                  <span>Filters {showAdvancedFilters ? '▲' : '▼'}</span>
+                </button>
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-              <div className="flex items-center gap-1.5">
-                <span className="text-slate-400">Min Score:</span>
-                <select
-                  value={minScoreFilter}
-                  onChange={e => setMinScoreFilter(Number(e.target.value))}
-                  className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none"
-                >
-                  <option value="0">All Scores</option>
-                  <option value="70">70%+</option>
-                  <option value="80">80%+</option>
-                  <option value="90">90%+</option>
-                </select>
-              </div>
+            {/* Advanced Filters Expandable Drawer */}
+            {showAdvancedFilters && (
+              <div className="pt-3 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                <div>
+                  <span className="text-slate-400 block text-[11px] mb-1">Required Skill:</span>
+                  <select
+                    value={requiredSkillFilter}
+                    onChange={e => setRequiredSkillFilter(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-slate-200 focus:outline-none"
+                  >
+                    <option value="ALL">All Skills</option>
+                    {availableRequiredSkills.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
 
-              <div className="flex items-center gap-1.5">
-                <span className="text-slate-400">Recommendation:</span>
-                <select
-                  value={recommendationFilter}
-                  onChange={e => setRecommendationFilter(e.target.value)}
-                  className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none"
-                >
-                  <option value="ALL">All Categories</option>
-                  <option value="Strong Match">Strong Match</option>
-                  <option value="Potential Match">Potential Match</option>
-                  <option value="Needs Review">Needs Review</option>
-                </select>
-              </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px] mb-1">Missing Skill:</span>
+                  <select
+                    value={missingSkillFilter}
+                    onChange={e => setMissingSkillFilter(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-slate-200 focus:outline-none"
+                  >
+                    <option value="ALL">None Filtered</option>
+                    {availableRequiredSkills.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
 
-              <div className="flex items-center gap-1.5">
-                <span className="text-slate-400">Learning Curve:</span>
-                <select
-                  value={learningDistanceFilter}
-                  onChange={e => setLearningDistanceFilter(e.target.value)}
-                  className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none"
-                >
-                  <option value="ALL">All Levels</option>
-                  <option value="LOW">Low Curve</option>
-                  <option value="MEDIUM">Medium Curve</option>
-                  <option value="HIGH">High Curve</option>
-                </select>
+                <div>
+                  <span className="text-slate-400 block text-[11px] mb-1">Seniority:</span>
+                  <select
+                    value={seniorityFilter}
+                    onChange={e => setSeniorityFilter(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-slate-200 focus:outline-none"
+                  >
+                    <option value="ALL">All Levels</option>
+                    <option value="Senior">Senior (5+ yrs)</option>
+                    <option value="Mid">Mid (2-4 yrs)</option>
+                    <option value="Junior">Junior (&lt;2 yrs)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <span className="text-slate-400 block text-[11px] mb-1">Evidence Strength:</span>
+                  <select
+                    value={evidenceStrengthFilter}
+                    onChange={e => setEvidenceStrengthFilter(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-slate-200 focus:outline-none"
+                  >
+                    <option value="ALL">All Strengths</option>
+                    <option value="Strong">Strong</option>
+                    <option value="Moderate">Moderate</option>
+                    <option value="Inconclusive">Inconclusive</option>
+                  </select>
+                </div>
+
+                <div>
+                  <span className="text-slate-400 block text-[11px] mb-1">Learning Distance:</span>
+                  <select
+                    value={learningDistanceFilter}
+                    onChange={e => setLearningDistanceFilter(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-slate-200 focus:outline-none"
+                  >
+                    <option value="ALL">All Curves</option>
+                    <option value="LOW">Low Curve</option>
+                    <option value="MEDIUM">Medium Curve</option>
+                    <option value="HIGH">High Curve</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col justify-end">
+                  <label className="flex items-center gap-2 cursor-pointer pt-3">
+                    <input
+                      type="checkbox"
+                      checked={transferableFilter}
+                      onChange={e => setTransferableFilter(e.target.checked)}
+                      className="rounded border-slate-700 text-indigo-600 focus:ring-0"
+                    />
+                    <span className="text-slate-300 text-[11px]">Has Transferable Skills</span>
+                  </label>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Comparison CTA Bar (Floating if 2+ selected) */}
@@ -778,22 +903,185 @@ Preferred:
             </div>
           )}
 
-          {/* Candidate Grid */}
+          {/* Candidate Results Toolbar & Toggle */}
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-white tracking-tight">
-                Ranked Candidate Screening Pipeline ({filteredCandidates.length})
-              </h3>
-              <span className="text-xs text-slate-400">
-                Select checkbox on card to include in candidate comparison
-              </span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-white tracking-tight">
+                  Screened Candidates ({filteredCandidates.length})
+                </h3>
+                <span className="text-xs text-slate-400">
+                  Evidence-first ranking based on verified resume artifacts and ontology matching
+                </span>
+              </div>
+
+              {/* View Mode Toggle */}
+              <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('table')}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium transition ${
+                    viewMode === 'table' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <List className="w-3.5 h-3.5" />
+                  <span>Result Table</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('cards')}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium transition ${
+                    viewMode === 'cards' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span>Detailed Cards</span>
+                </button>
+              </div>
             </div>
 
             {filteredCandidates.length === 0 ? (
               <div className="py-16 text-center text-xs text-slate-400 bg-slate-900/60 rounded-xl border border-slate-800">
                 No candidates match the specified filter criteria.
               </div>
+            ) : viewMode === 'table' ? (
+              /* REQUIRED RESULT TABLE: Candidate | Match | Skills | Experience | Projects | Evidence | Recommendation */
+              <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/90 shadow-xl">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-slate-400 font-semibold bg-slate-950/60 uppercase text-[11px] tracking-wider">
+                      <th className="py-3 px-3 text-center w-8">
+                        <span className="sr-only">Select</span>
+                      </th>
+                      <th className="py-3 px-3">Candidate</th>
+                      <th className="py-3 px-3 text-right">Match</th>
+                      <th className="py-3 px-3">Skills</th>
+                      <th className="py-3 px-3">Experience</th>
+                      <th className="py-3 px-3">Projects</th>
+                      <th className="py-3 px-3">Evidence</th>
+                      <th className="py-3 px-3">Recommendation</th>
+                      <th className="py-3 px-3 text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/80">
+                    {filteredCandidates.map((record, idx) => {
+                      const name = blindScreening ? record.anonymousId : record.candidateName;
+                      const score = record.matchResult.overallScore;
+                      return (
+                        <tr
+                          key={record.candidateId}
+                          className="hover:bg-slate-800/40 transition cursor-pointer group"
+                          onClick={() => setInspectMatch(record.matchResult)}
+                        >
+                          <td className="py-3.5 px-3 text-center" onClick={e => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selectedForCompare.includes(record.candidateId)}
+                              onChange={() => toggleSelectForCompare(record.candidateId)}
+                              className="rounded border-slate-700 text-indigo-600 focus:ring-0 cursor-pointer"
+                              title="Select for comparison"
+                            />
+                          </td>
+                          <td className="py-3.5 px-3">
+                            <div className="font-semibold text-white group-hover:text-indigo-300 transition flex items-center gap-1.5">
+                              <span>#{idx + 1}</span>
+                              <span>{name}</span>
+                            </div>
+                            <div className="text-[11px] text-slate-400 truncate max-w-xs">
+                              {record.candidateProfile.title} • {record.candidateProfile.yearsOfExperience} yrs
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-3 text-right">
+                            <div className={`font-extrabold text-sm ${score >= 80 ? 'text-emerald-400' : score >= 70 ? 'text-cyan-400' : 'text-amber-400'}`}>
+                              {score}%
+                            </div>
+                            <div className="text-[10px] text-slate-500">Overall Match</div>
+                          </td>
+                          <td className="py-3.5 px-3">
+                            <div className="font-medium text-slate-200">
+                              {record.matchResult.breakdown.requiredCoverage}% coverage
+                            </div>
+                            <div className="text-[11px] text-slate-400 truncate max-w-[180px]">
+                              {record.matchResult.matchedRequiredSkills.slice(0, 3).join(', ')}
+                              {record.matchResult.matchedRequiredSkills.length > 3 ? '...' : ''}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-3">
+                            <div className="font-medium text-slate-200">
+                              {record.matchResult.breakdown.experienceCompatibility}% fit
+                            </div>
+                            <div className="text-[11px] text-slate-400">
+                              {record.candidateProfile.yearsOfExperience} yrs documented
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-3">
+                            <div className="font-medium text-slate-200">
+                              {record.matchResult.breakdown.projectEvidenceScore}% relevance
+                            </div>
+                            <div className="text-[11px] text-slate-400">
+                              {record.candidateProfile.projects.length} verified project{record.candidateProfile.projects.length !== 1 ? 's' : ''}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-3">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border ${
+                              record.matchResult.evidenceStrength === 'Strong'
+                                ? 'bg-emerald-950 text-emerald-300 border-emerald-600/50'
+                                : record.matchResult.evidenceStrength === 'Moderate'
+                                ? 'bg-cyan-950 text-cyan-300 border-cyan-600/50'
+                                : 'bg-slate-800 text-slate-400 border-slate-700'
+                            }`}>
+                              <ShieldCheck className="w-3 h-3" />
+                              {record.matchResult.evidenceStrength}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-3">
+                            {record.recommendation === 'Strong Match' && (
+                              <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-600/50 inline-block">
+                                Strong Match
+                              </span>
+                            )}
+                            {record.recommendation === 'Potential Match' && (
+                              <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-cyan-950 text-cyan-300 border border-cyan-600/50 inline-block">
+                                Potential Match
+                              </span>
+                            )}
+                            {record.recommendation === 'Needs Review' && (
+                              <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-950 text-amber-300 border border-amber-600/50 inline-block">
+                                Needs Review
+                              </span>
+                            )}
+                            {record.recommendation === 'Low Match' && (
+                              <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700 inline-block">
+                                Low Match
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-3 text-center" onClick={e => e.stopPropagation()}>
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setInspectMatch(record.matchResult)}
+                                className="px-2.5 py-1 rounded bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60 text-[11px] font-medium transition"
+                              >
+                                Inspect
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setInterviewMatch(record.matchResult)}
+                                className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-medium transition"
+                              >
+                                Questions
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             ) : (
+              /* CARD VIEW */
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filteredCandidates.map((record, idx) => (
                   <div key={record.candidateId} className="relative group">

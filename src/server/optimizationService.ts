@@ -100,26 +100,29 @@ export async function generateResumeSuggestions(
     rationale: 'Categorized skill lists parse 40% more accurately in ATS scanners compared to raw flat lists.'
   });
 
-  // Attempt Gemini enhancement if available
+  // Attempt Gemini enhancement if available with timeout guard
   if (geminiClient && sections.experience) {
     try {
       const prompt = `You are an expert resume optimizer. Rewrite 2 experience bullets from this candidate's resume for a ${job.title} role.
 Rewrite mode: "${mode}".
-IMPORTANT RULES:
-- NEVER invent facts, metrics, or technologies the candidate did not mention.
-- If metrics are missing, use phrasing that emphasizes engineering rigor without fabricating fake numbers.
+STRICT ETHICAL & FACTUAL RULES:
+- AI MUST NEVER fabricate companies, job titles, technologies, certifications, degrees, projects, achievements, metrics, years of experience, or responsibilities.
+- If a metric is missing, DO NOT invent one. Instead suggest: "[Add a measurable result here if you have one.]"
 - Return JSON array of objects: [{ "section": "Experience", "original": string, "suggested": string, "rationale": string }]
 
 Original experience bullets:
 ${expLines.slice(0, 3).join('\n')}`;
 
-      const res = await geminiClient.models.generateContent({
+      const timeoutPromise = new Promise<null>(resolve => setTimeout(() => resolve(null), 3500));
+      const geminiPromise = geminiClient.models.generateContent({
         model: 'gemini-3.8-flash',
         contents: prompt,
         config: { responseMimeType: 'application/json' }
       });
 
-      if (res.text) {
+      const res = await Promise.race([geminiPromise, timeoutPromise]);
+
+      if (res && 'text' in res && res.text) {
         const parsed = JSON.parse(res.text);
         if (Array.isArray(parsed)) {
           parsed.forEach((item, i) => {

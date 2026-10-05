@@ -181,7 +181,7 @@ export function evaluateCandidateMatch(
       skill: req.skill,
       requirementType: effectiveType,
       matchType: 'MISSING',
-      candidateEvidence: 'No documented evidence in resume or project portfolio',
+      candidateEvidence: `${req.skill} was not demonstrated in the uploaded resume or linked artifacts`,
       evidenceSource: 'none',
       confidence: 0,
       learningDistance: dist.level,

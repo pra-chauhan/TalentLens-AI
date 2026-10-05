@@ -192,7 +192,7 @@ export function analyzeAtsAndContent(
     jobRelevance: jobRelevanceScore,
     formatWarnings,
     sectionAnalysis,
-    disclaimer: 'TalentLens ATS Compatibility is an estimated analytical score based on resume structure, job alignment, skills and content. Actual ATS systems may use different algorithms and configurations.'
+    disclaimer: 'TalentLens ATS Compatibility is an estimated analytical score based on resume structure, job alignment, skills, and content. Actual ATS systems may use different algorithms and configurations.'
   };
 
   // 4. Content Quality Score
@@ -229,7 +229,7 @@ export function analyzeAtsAndContent(
   // 6. Weaknesses (Where points are lost)
   const weaknesses: string[] = [];
   if (matchResult.missingRequiredSkills.length > 0) {
-    weaknesses.push(`Missing non-negotiable required skill(s): ${matchResult.missingRequiredSkills.join(', ')}.`);
+    weaknesses.push(`Required skill(s) not demonstrated in the uploaded resume: ${matchResult.missingRequiredSkills.join(', ')}.`);
   }
   if (formatWarnings.length > 0) {
     weaknesses.push(formatWarnings[0].warning);
@@ -280,8 +280,8 @@ export function analyzeAtsAndContent(
     skillGaps.push({
       skill: req.skill,
       jdRequirement: req.type === 'REQUIRED' ? 'Required' : 'Preferred',
-      resumeEvidence: 'None',
-      status: 'MISSING',
+      resumeEvidence: 'Not demonstrated in uploaded resume',
+      status: 'MISSING / NOT DEMONSTRATED',
       priority: req.type === 'REQUIRED' ? 'High' : 'Medium'
     });
   }
@@ -307,7 +307,7 @@ export function analyzeAtsAndContent(
       missingKeywords.push({
         keyword: req.skill,
         category: 'Not demonstrated',
-        recommendation: `Do not add "${req.skill}" unless you have actually used it. Never fabricate qualifications.`,
+        recommendation: `${req.skill} was not demonstrated in the uploaded resume. Do not add it unless you have actually used it. Never fabricate qualifications.`,
         safeToAdd: false
       });
     }

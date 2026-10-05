@@ -286,8 +286,8 @@ export async function buildDynamicCandidateProfile(
     }
   }
 
-  // Optional: refine via Gemini 3.8 Flash if available
-  if (geminiClient) {
+  // Optional: refine via Gemini 3.8 Flash only if candidate name could not be deterministically determined
+  if (geminiClient && (!candidateName || candidateName.startsWith('Candidate #'))) {
     try {
       const prompt = `You are a resume parser. Extract from the resume text:
 1. Candidate Name (if visible, else empty)
@@ -306,7 +306,8 @@ Return JSON:
   "degree": string,
   "institution": string
 }`;
-      const response = await geminiClient.models.generateContent({
+      const timeoutPromise = new Promise<null>(resolve => setTimeout(() => resolve(null), 3500));
+      const geminiPromise = geminiClient.models.generateContent({
         model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
@@ -314,7 +315,9 @@ Return JSON:
         }
       });
 
-      if (response.text) {
+      const response = await Promise.race([geminiPromise, timeoutPromise]);
+
+      if (response && 'text' in response && response.text) {
         const parsed = JSON.parse(response.text);
         if (parsed.name && parsed.name.trim().length > 2 && parsed.name.length < 50) {
           candidateName = parsed.name.trim();

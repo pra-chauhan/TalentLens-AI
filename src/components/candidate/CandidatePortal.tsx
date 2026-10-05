@@ -1082,38 +1082,49 @@ Preferred:
           <div className="p-3.5 rounded-xl bg-slate-900 border border-amber-600/40 text-amber-300 text-xs flex items-center gap-2.5">
             <Info className="w-4 h-4 text-amber-400 shrink-0" />
             <span>
-              <strong>Review disclaimer:</strong> Review suggested changes carefully and only retain information that accurately represents your actual experience. Never fabricate metrics or skills.
+              <strong>Review disclaimer:</strong> Review suggested changes carefully and only retain information that accurately represents your actual experience. Never fabricate metrics, companies, or skills. If a metric is missing, do not invent one. Instead suggest: <em>"Add a measurable result here if you have one."</em>
             </span>
           </div>
 
           {/* Score Simulator Difference Banner (if re-analyzed) */}
           {scoreComparison && (
             <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-950/70 to-slate-900 border border-emerald-600/50 shadow-xl space-y-4 text-xs">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-emerald-900/50">
                 <div className="flex items-center gap-2 text-emerald-300 font-bold text-sm">
                   <TrendingUp className="w-5 h-5 text-emerald-400" />
-                  <span>Real Score Simulation: BEFORE vs AFTER</span>
+                  <span>Re-Analysis Score Comparison: BEFORE vs AFTER</span>
                 </div>
-                <span className="text-emerald-300 font-bold text-base">
-                  +{scoreComparison.afterOverall - scoreComparison.beforeOverall} Net Points
-                </span>
+                <div className="flex items-center gap-3 bg-emerald-950/90 border border-emerald-700/50 px-3 py-1.5 rounded-xl">
+                  <span className="text-slate-300 font-medium">Previous Score: <strong className="text-slate-100">{scoreComparison.beforeOverall}</strong></span>
+                  <span className="text-slate-600">→</span>
+                  <span className="text-slate-300 font-medium">New Score: <strong className="text-emerald-400">{scoreComparison.afterOverall}</strong></span>
+                  <span className="text-emerald-400 font-extrabold px-2 py-0.5 rounded bg-emerald-900/80 border border-emerald-600/60">
+                    Improvement: {scoreComparison.afterOverall - scoreComparison.beforeOverall >= 0 ? `+${scoreComparison.afterOverall - scoreComparison.beforeOverall}` : scoreComparison.afterOverall - scoreComparison.beforeOverall}
+                  </span>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
                 <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
-                  <span className="text-slate-400 block text-[11px]">Overall Score</span>
+                  <span className="text-slate-400 block text-[11px]">Overall Job Match</span>
                   <div className="text-lg font-extrabold text-white mt-0.5">
                     <span className="text-slate-400 line-through text-xs mr-1">{scoreComparison.beforeOverall}</span>
                     <span className="text-emerald-400">{scoreComparison.afterOverall}</span>
                   </div>
+                  <span className="text-[10px] text-emerald-400">
+                    {scoreComparison.afterOverall >= scoreComparison.beforeOverall ? `+${scoreComparison.afterOverall - scoreComparison.beforeOverall}` : scoreComparison.afterOverall - scoreComparison.beforeOverall} pts
+                  </span>
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
-                  <span className="text-slate-400 block text-[11px]">ATS Score</span>
+                  <span className="text-slate-400 block text-[11px]">ATS Compatibility Score</span>
                   <div className="text-lg font-extrabold text-indigo-300 mt-0.5">
                     <span className="text-slate-400 line-through text-xs mr-1">{scoreComparison.beforeAts}</span>
                     <span className="text-emerald-400">{scoreComparison.afterAts}</span>
                   </div>
+                  <span className="text-[10px] text-indigo-400">
+                    {scoreComparison.afterAts >= scoreComparison.beforeAts ? `+${scoreComparison.afterAts - scoreComparison.beforeAts}` : scoreComparison.afterAts - scoreComparison.beforeAts} pts
+                  </span>
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
@@ -1122,6 +1133,9 @@ Preferred:
                     <span className="text-slate-400 line-through text-xs mr-1">{scoreComparison.beforeSkill}%</span>
                     <span className="text-emerald-400">{scoreComparison.afterSkill}%</span>
                   </div>
+                  <span className="text-[10px] text-cyan-400">
+                    {scoreComparison.afterSkill >= scoreComparison.beforeSkill ? `+${scoreComparison.afterSkill - scoreComparison.beforeSkill}%` : `${scoreComparison.afterSkill - scoreComparison.beforeSkill}%`}
+                  </span>
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
@@ -1129,31 +1143,53 @@ Preferred:
                   <div className="text-lg font-extrabold text-purple-300 mt-0.5">
                     <span>{scoreComparison.afterExperience}%</span>
                   </div>
+                  <span className="text-[10px] text-slate-500">Domain alignment</span>
                 </div>
               </div>
 
-              {/* What improved pills */}
-              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-emerald-900/50">
-                <span className="text-slate-400 font-semibold text-[11px]">What Improved:</span>
-                {scoreComparison.deltas.atsStructure > 0 && (
-                  <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/40 text-[11px]">
-                    ATS Structure: +{scoreComparison.deltas.atsStructure}
-                  </span>
-                )}
-                {scoreComparison.deltas.keywordAlignment > 0 && (
-                  <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-700/40 text-[11px]">
-                    Keyword Alignment: +{scoreComparison.deltas.keywordAlignment}
-                  </span>
-                )}
-                {scoreComparison.deltas.projectRelevance > 0 && (
-                  <span className="px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-700/40 text-[11px]">
-                    Project Relevance: +{scoreComparison.deltas.projectRelevance}
-                  </span>
-                )}
-                {scoreComparison.deltas.contentQuality > 0 && (
-                  <span className="px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-700/40 text-[11px]">
-                    Content Quality: +{scoreComparison.deltas.contentQuality}
-                  </span>
+              {/* What improved pills & explanation */}
+              <div className="pt-2 border-t border-emerald-900/50 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-slate-300 font-semibold text-[11px]">Exact Metric Changes:</span>
+                  {scoreComparison.deltas.atsStructure > 0 && (
+                    <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/40 text-[11px]">
+                      ATS Structure: +{scoreComparison.deltas.atsStructure}
+                    </span>
+                  )}
+                  {scoreComparison.deltas.keywordAlignment > 0 && (
+                    <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-700/40 text-[11px]">
+                      Keyword Alignment: +{scoreComparison.deltas.keywordAlignment}
+                    </span>
+                  )}
+                  {scoreComparison.deltas.projectRelevance > 0 && (
+                    <span className="px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-700/40 text-[11px]">
+                      Project Relevance: +{scoreComparison.deltas.projectRelevance}
+                    </span>
+                  )}
+                  {scoreComparison.deltas.contentQuality > 0 && (
+                    <span className="px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-700/40 text-[11px]">
+                      Content Quality: +{scoreComparison.deltas.contentQuality}
+                    </span>
+                  )}
+                </div>
+
+                {scoreComparison.textDiffs && scoreComparison.textDiffs.length > 0 && (
+                  <div className="mt-3 p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
+                    <span className="text-slate-400 font-semibold text-[11px] block">What Changed in Content:</span>
+                    <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                      {scoreComparison.textDiffs.map((diff, i) => (
+                        <div key={i} className="text-[11px] text-slate-300">
+                          <strong className="text-cyan-400">[{diff.section}]:</strong>{' '}
+                          {diff.added.length > 0 && (
+                            <span className="text-emerald-300">+{diff.added.length} lines refined. </span>
+                          )}
+                          {diff.removed.length > 0 && (
+                            <span className="text-rose-300/80">-{diff.removed.length} lines superseded. </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

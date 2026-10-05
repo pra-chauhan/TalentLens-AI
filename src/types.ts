@@ -296,8 +296,8 @@ export interface ATSAnalysisResult {
 export interface SkillGapItem {
   skill: string;
   jdRequirement: 'Required' | 'Preferred';
-  resumeEvidence: 'Strong' | 'Project' | 'Coursework' | 'Transferable' | 'None';
-  status: 'MATCH' | 'TRANSFERABLE' | 'PARTIAL' | 'MISSING';
+  resumeEvidence: 'Strong' | 'Project' | 'Coursework' | 'Transferable' | 'None' | 'Not demonstrated in uploaded resume' | string;
+  status: 'MATCH' | 'TRANSFERABLE' | 'PARTIAL' | 'MISSING / NOT DEMONSTRATED';
   priority: 'High' | 'Medium' | 'Low';
   evidenceQuote?: string;
   transferRationale?: string;

@@ -156,9 +156,9 @@ Preferred:
     'u-recruiter-1',
     'Senior Backend Engineer',
     'Core Infrastructure',
-    sampleJd
+    sampleJd,
+    'batch-seed-eng-1'
   );
-  seedBatch.id = 'batch-seed-eng-1';
   seedBatch.status = 'COMPLETED';
   seedBatch.totalResumes = 5;
   seedBatch.processedResumes = 5;
@@ -191,6 +191,7 @@ Preferred:
       certifications: []
     };
     const m = evaluateCandidateMatch(candP, jobReq, DEFAULT_WEIGHTS);
+    candidates.unshift(candP);
     return {
       id: `sc-seed-${i}`,
       candidateId: candP.id,
@@ -207,6 +208,13 @@ Preferred:
   });
   seedBatch.candidates.sort((a, b) => b.matchResult.overallScore - a.matchResult.overallScore);
   screeningBatches.set(seedBatch.id, seedBatch);
+
+  // Register batch job requisition with batch ID so What-If and Copilot can find it
+  const batchJobReq: JobRequisition = {
+    ...jobReq,
+    id: seedBatch.id
+  };
+  jobs.unshift(batchJobReq);
 }
 
 bootstrapSeeds();
@@ -1102,6 +1110,11 @@ app.post('/api/recruiter/screening-batches', (req, res) => {
 
   const batch = createScreeningBatch('u-recruiter-1', jobTitle || 'Software Engineer', department || 'Engineering', jobDescription);
 
+  // Register job requisition with batch ID so What-If and Copilot endpoints match
+  const jobReq = buildJobRequisitionFromJd(batch.jobTitle, batch.department, batch.jobDescription);
+  jobReq.id = batch.id;
+  jobs.unshift(jobReq);
+
   auditLogs.unshift({
     id: `log-${Date.now()}`,
     timestamp: new Date().toISOString(),
@@ -1152,6 +1165,8 @@ app.post('/api/recruiter/screening-batches/:id/resumes', upload.array('resumes',
         batch.candidates.push(record);
         processedCandidates.push(record);
         batch.processedResumes++;
+        // Register dynamically created candidate in candidates array for copilot and interview generator
+        candidates.unshift(record.candidateProfile);
       } catch (err: unknown) {
         console.warn(`Failed processing resume "${file.originalname}":`, err);
         batch.failedResumes++;
