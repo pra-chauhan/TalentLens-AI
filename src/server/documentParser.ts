@@ -33,6 +33,7 @@ export interface ExtractedDocument {
     certifications: string;
     achievements: string;
     leadership: string;
+    parsedSectionsDict?: Record<string, string>;
   };
   formattingSignals: {
     hasTwoColumnLayout: boolean;
@@ -640,14 +641,28 @@ export async function buildDynamicCandidateProfile(
 
   // 3. Estimate Experience Years strictly from dates in experience section or full text
   let yearsExp = 0;
-  const yearMatches = (segmented.experience + ' ' + rawText).match(/\b(20[0-2][0-9]|199[0-9])\b/g);
-  if (yearMatches && yearMatches.length >= 2) {
-    const numericYears = yearMatches.map(y => parseInt(y, 10));
+  
+  // Check for explicit statement: e.g. "4 years of experience" or "5+ yrs experience"
+  const explicitExpMatch = rawText.match(/(\d+)\+?\s*(?:years|yrs)(?:\s+of)?\s+experience/i);
+  if (explicitExpMatch && explicitExpMatch[1]) {
+    const parsedExp = parseInt(explicitExpMatch[1], 10);
+    if (parsedExp > 0 && parsedExp <= 40) {
+      yearsExp = parsedExp;
+    }
+  }
+
+  // Also calculate from date ranges in experience section
+  const expText = segmented.experience || rawText;
+  const expYearMatches = expText.match(/\b(20[0-2][0-9]|199[0-9])\b/g);
+  const hasPresent = /\b(present|current|now|ongoing)\b/i.test(expText);
+  
+  if (expYearMatches && expYearMatches.length > 0) {
+    const numericYears = expYearMatches.map(y => parseInt(y, 10));
     const minYear = Math.min(...numericYears);
-    const maxYear = Math.min(new Date().getFullYear(), Math.max(...numericYears));
+    const maxYear = hasPresent ? new Date().getFullYear() : Math.min(new Date().getFullYear(), Math.max(...numericYears));
     const span = maxYear - minYear;
     if (span >= 0 && span <= 30) {
-      yearsExp = Math.max(0.5, span);
+      yearsExp = Math.max(yearsExp, Math.max(0.5, span));
     }
   }
 
@@ -657,8 +672,8 @@ export async function buildDynamicCandidateProfile(
     const skillName = norm?.name || s;
 
     // Search where in the resume text this skill was demonstrated
-    let source: 'experience' | 'project' | 'coursework' | 'github' = 'experience';
-    let depth: 'production' | 'project' | 'coursework' | 'interest' = 'production';
+    let source: 'experience' | 'project' | 'certification' | 'github' | 'academic' = 'experience';
+    let depth: 'production' | 'project' | 'coursework' = 'production';
     let evidenceQuote = `Extracted from resume: documented competency in ${skillName}`;
 
     // Find sentence in text containing skill
@@ -677,7 +692,7 @@ export async function buildDynamicCandidateProfile(
         source = 'project';
         depth = 'project';
       } else if (segmented.education.includes(matchingSentence)) {
-        source = 'coursework';
+        source = 'academic';
         depth = 'coursework';
       }
     }

@@ -56,19 +56,19 @@ B.S. Computer Science — University of California (2021)`;
   assert.ok(hash && hash.length === 64, 'SHA-256 hash must be 64 hex characters');
 
   const extracted = await extractTextFromBuffer(buffer, 'resume.txt', 'text/plain');
-  assert.ok(extracted.includes('Devon Vance'), 'Extracted text must contain candidate name');
+  assert.ok(extracted.normalizedText.includes('Devon Vance'), 'Extracted text must contain candidate name');
   console.log('✓ Document text and hash extracted successfully.');
 
   // Test 2: Document Structure & Format Warnings
   console.log('\n[Test 2] Document Structure & Format Warnings');
-  const signals = analyzeDocumentStructure(extracted);
+  const signals = analyzeDocumentStructure(extracted.rawText);
   assert.strictEqual(typeof signals.hasTwoColumnLayout, 'boolean');
   assert.strictEqual(typeof signals.hasTables, 'boolean');
   console.log('✓ Document layout signals parsed successfully.');
 
   // Test 3: Dynamic Candidate Profile Building
   console.log('\n[Test 3] Dynamic Candidate Profile Building (No Predefined Records)');
-  const profile = await buildDynamicCandidateProfile(extracted, 'resume.txt', 1);
+  const profile = await buildDynamicCandidateProfile(extracted.rawText, 'resume.txt', 1);
   assert.strictEqual(profile.fullName, 'Devon Vance');
   assert.ok(profile.skills.length >= 4, 'Must extract at least 4 technical skills');
   assert.ok(profile.skills.some(s => s.skill === 'React'), 'Must extract React');
@@ -104,11 +104,14 @@ Preferred:
   // Test 6: ATS Compatibility & Ethical Guardrails
   console.log('\n[Test 6] ATS Compatibility & Ethical Keyword Classification');
   const extractedDoc = {
-    rawText: extracted,
+    rawText: extracted.rawText,
+    normalizedText: extracted.normalizedText,
     fileHash: hash,
-    charCount: extracted.length,
-    wordCount: extracted.split(/\s+/).length,
-    sections: segmentResumeSections(extracted),
+    charCount: extracted.rawText.length,
+    wordCount: extracted.rawText.split(/\s+/).length,
+    pageCount: extracted.pageCount,
+    extractionMethod: extracted.extractionMethod,
+    sections: segmentResumeSections(extracted.rawText),
     formattingSignals: signals
   };
 

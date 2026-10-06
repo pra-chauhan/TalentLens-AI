@@ -21,7 +21,9 @@ import {
   analyzeDocumentStructure,
   buildDynamicCandidateProfile,
   calculateFileHash,
-  segmentResumeSections
+  segmentResumeSections,
+  normalizeExtractedText,
+  ExtractedDocument
 } from './src/server/documentParser';
 import { analyzeAtsAndContent } from './src/server/atsService';
 import { generateResumeSuggestions, calculateTextDiffs } from './src/server/optimizationService';
@@ -109,11 +111,15 @@ Preferred:
   const jobReq = buildJobRequisitionFromJd('Senior Backend Engineer', 'Core Infrastructure', sampleJd);
   const candProf = buildDynamicCandidateProfile(sampleResumeText, 'Alex_Chen_Resume.pdf', 101);
   candProf.then(prof => {
-    const extractedDoc = {
+    const sampleHash = calculateFileHash(Buffer.from(sampleResumeText));
+    const extractedDoc: ExtractedDocument = {
       rawText: sampleResumeText,
-      fileHash: calculateFileHash(Buffer.from(sampleResumeText)),
+      normalizedText: sampleResumeText,
+      fileHash: sampleHash,
       charCount: sampleResumeText.length,
       wordCount: sampleResumeText.split(/\s+/).filter(Boolean).length,
+      pageCount: 1,
+      extractionMethod: 'plain_text',
       sections: segmentResumeSections(sampleResumeText),
       formattingSignals: analyzeDocumentStructure(sampleResumeText)
     };
@@ -145,7 +151,22 @@ Preferred:
         improvementRoadmap: ats.improvementRoadmap,
         optimizationSuggestions: sugs,
         rawResumeText: sampleResumeText,
-        parsedSections: extractedDoc.sections.parsedSectionsDict
+        normalizedResumeText: sampleResumeText,
+        parsedSections: extractedDoc.sections.parsedSectionsDict || {},
+        lineage: {
+          resumeId: `res-${sampleHash.substring(0, 12)}`,
+          resumeVersionId: 'v1.0',
+          contentHash: sampleHash,
+          analysisId: 'analysis-seed-alex',
+          jobId: jobReq.id,
+          candidateId: prof.id,
+          parserVersion: 'v2.4-pdfparse',
+          analysisVersion: 'v2.0-evidence',
+          extractionMethod: 'plain_text',
+          textLength: sampleResumeText.length,
+          pageCount: 1,
+          timestamp: new Date().toISOString()
+        }
       };
       candidateAnalyses.set(seedAnalysis.id, seedAnalysis);
     });
@@ -822,7 +843,12 @@ app.post('/api/candidate/upload-and-analyze', upload.single('resume'), async (re
     const gemini = getGeminiClient();
 
     // 1. Extract text
-    const rawText = await extractTextFromBuffer(file.buffer, file.originalname, file.mimetype, gemini);
+    const extracted = await extractTextFromBuffer(file.buffer, file.originalname, file.mimetype, gemini);
+    const rawText = extracted.rawText;
+    const normalizedText = extracted.normalizedText;
+    const extractionMethod = extracted.extractionMethod;
+    const pageCount = extracted.pageCount;
+
     if (!rawText || rawText.trim().length < 40) {
       return res.status(400).json({
         error: {
@@ -848,11 +874,14 @@ app.post('/api/candidate/upload-and-analyze', upload.single('resume'), async (re
     const segmented = segmentResumeSections(rawText);
     const fileHash = calculateFileHash(file.buffer);
 
-    const extractedDoc = {
+    const extractedDoc: ExtractedDocument = {
       rawText,
+      normalizedText,
       fileHash,
       charCount: rawText.length,
       wordCount: rawText.split(/\s+/).filter(Boolean).length,
+      pageCount,
+      extractionMethod,
       sections: segmented,
       formattingSignals
     };
@@ -895,7 +924,22 @@ app.post('/api/candidate/upload-and-analyze', upload.single('resume'), async (re
       improvementRoadmap: atsAndContent.improvementRoadmap,
       optimizationSuggestions: suggestions,
       rawResumeText: rawText,
-      parsedSections: segmented.parsedSectionsDict
+      normalizedResumeText: normalizedText,
+      parsedSections: segmented.parsedSectionsDict,
+      lineage: {
+        resumeId: `res-${fileHash.substring(0, 12)}`,
+        resumeVersionId: 'v1.0',
+        contentHash: fileHash,
+        analysisId,
+        jobId: jobRequisition.id,
+        candidateId: candidateProfile.id,
+        parserVersion: 'v2.4-pdfparse',
+        analysisVersion: 'v2.0-evidence',
+        extractionMethod,
+        textLength: rawText.length,
+        pageCount,
+        timestamp: new Date().toISOString()
+      }
     };
 
     candidateAnalyses.set(analysisId, fullAnalysis);
@@ -939,12 +983,17 @@ app.post('/api/candidate/reanalyze', async (req, res) => {
     const gemini = getGeminiClient();
     const formattingSignals = analyzeDocumentStructure(resumeTextToUse);
     const segmented = segmentResumeSections(resumeTextToUse);
+    const resumeHash = calculateFileHash(Buffer.from(resumeTextToUse));
+    const normalizedText = normalizeExtractedText(resumeTextToUse);
 
-    const extractedDoc = {
+    const extractedDoc: ExtractedDocument = {
       rawText: resumeTextToUse,
-      fileHash: calculateFileHash(Buffer.from(resumeTextToUse)),
+      normalizedText,
+      fileHash: resumeHash,
       charCount: resumeTextToUse.length,
       wordCount: resumeTextToUse.split(/\s+/).filter(Boolean).length,
+      pageCount: prev?.lineage?.pageCount || 1,
+      extractionMethod: prev?.lineage?.extractionMethod || 'plain_text',
       sections: segmented,
       formattingSignals
     };
@@ -1014,7 +1063,22 @@ app.post('/api/candidate/reanalyze', async (req, res) => {
       improvementRoadmap: atsAndContent.improvementRoadmap,
       optimizationSuggestions: newSuggestions,
       rawResumeText: resumeTextToUse,
-      parsedSections: segmented.parsedSectionsDict
+      normalizedResumeText: normalizedText,
+      parsedSections: segmented.parsedSectionsDict,
+      lineage: {
+        resumeId: prev?.lineage?.resumeId || `res-${resumeHash.substring(0, 12)}`,
+        resumeVersionId: 'v2.0-optimized',
+        contentHash: resumeHash,
+        analysisId: newAnalysisId,
+        jobId: jobRequisition.id,
+        candidateId: candidateProfile.id,
+        parserVersion: 'v2.4-pdfparse',
+        analysisVersion: 'v2.0-evidence',
+        extractionMethod: prev?.lineage?.extractionMethod || 'plain_text',
+        textLength: resumeTextToUse.length,
+        pageCount: prev?.lineage?.pageCount || 1,
+        timestamp: new Date().toISOString()
+      }
     };
 
     candidateAnalyses.set(newAnalysisId, updatedAnalysis);
@@ -1050,11 +1114,15 @@ app.post('/api/candidate/optimize', async (req, res) => {
     }
 
     const gemini = getGeminiClient();
-    const extractedDoc = {
+    const optHash = calculateFileHash(Buffer.from(analysis.rawResumeText));
+    const extractedDoc: ExtractedDocument = {
       rawText: analysis.rawResumeText,
-      fileHash: calculateFileHash(Buffer.from(analysis.rawResumeText)),
+      normalizedText: analysis.normalizedResumeText || analysis.rawResumeText,
+      fileHash: optHash,
       charCount: analysis.rawResumeText.length,
       wordCount: analysis.rawResumeText.split(/\s+/).filter(Boolean).length,
+      pageCount: analysis.lineage?.pageCount || 1,
+      extractionMethod: analysis.lineage?.extractionMethod || 'plain_text',
       sections: segmentResumeSections(analysis.rawResumeText),
       formattingSignals: analyzeDocumentStructure(analysis.rawResumeText)
     };
