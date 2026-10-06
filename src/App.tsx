@@ -75,7 +75,7 @@ export default function App() {
           <div className="flex items-center gap-4 text-[11px]">
             <span className="flex items-center gap-1 text-slate-400">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              EEOC & Blind Screening Compliant
+              Made by ~ Pragya
             </span>
             <button
               onClick={() => setShowAuditModal(true)}
