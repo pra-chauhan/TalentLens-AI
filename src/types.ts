@@ -371,6 +371,42 @@ export interface ResumeOptimizationSuggestion {
   rationale: string;
 }
 
+export interface DataLineage {
+  resumeId: string;
+  resumeVersionId: string;
+  contentHash: string;
+  analysisId: string;
+  jobId: string;
+  candidateId: string;
+  parserVersion: string;
+  analysisVersion: string;
+  extractionMethod: 'pdf_text' | 'pdf_ocr' | 'docx_text' | 'plain_text';
+  textLength: number;
+  pageCount: number;
+  timestamp: string;
+}
+
+export interface ResumeParsingDebugResult {
+  filename: string;
+  fileSizeBytes: number;
+  fileType: string;
+  fileHash: string;
+  pageCount: number;
+  extractionMethod: 'pdf_text' | 'pdf_ocr' | 'docx_text' | 'plain_text';
+  rawTextLength: number;
+  normalizedTextLength: number;
+  rawExtractedText: string;
+  normalizedText: string;
+  detectedSections: string[];
+  structuredProfile: CandidateProfile;
+  evidenceItems: {
+    field: string;
+    value: string;
+    sourceQuote: string;
+    sourceSection: string;
+  }[];
+}
+
 export interface CandidateAnalysisResult {
   id: string;
   createdAt: string;
@@ -395,7 +431,9 @@ export interface CandidateAnalysisResult {
   improvementRoadmap: ImprovementRoadmapItem[];
   optimizationSuggestions: ResumeOptimizationSuggestion[];
   rawResumeText: string;
+  normalizedResumeText?: string;
   parsedSections: Record<string, string>;
+  lineage: DataLineage;
 }
 
 export interface ScoreComparisonDiff {

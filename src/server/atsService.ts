@@ -165,25 +165,25 @@ export function analyzeAtsAndContent(
   const keywordScore = Math.min(25, Math.max(6, Math.round((reqMatchedCount / reqTotal) * 25)));
 
   // Skills alignment (0-20)
-  const skillCoveragePct = matchResult.breakdown.requiredCoverage || 50;
-  const skillsScore = Math.min(20, Math.max(5, Math.round((skillCoveragePct / 100) * 20)));
+  const skillCoveragePct = matchResult.breakdown.requiredCoverage ?? 0;
+  const skillsScore = Math.min(20, Math.max(0, Math.round((skillCoveragePct / 100) * 20)));
 
   // Experience alignment (0-15)
-  const expMatch = matchResult.breakdown.experienceCompatibility || 60;
-  const experienceScore = Math.min(15, Math.max(4, Math.round((expMatch / 100) * 15)));
+  const expMatch = matchResult.breakdown.experienceCompatibility ?? 0;
+  const experienceScore = Math.min(15, Math.max(0, Math.round((expMatch / 100) * 15)));
 
   // Resume structure (0-10)
   const presentSections = sectionAnalysis.filter(s => s.status === 'strong' || s.status === 'weak').length;
-  const structureScore = Math.min(10, Math.max(4, Math.round((presentSections / 7) * 10)));
+  const structureScore = Math.min(10, Math.max(0, Math.round((presentSections / 7) * 10)));
 
   // Job relevance (0-10)
-  const semanticPct = matchResult.breakdown.semanticSimilarity || 60;
-  const jobRelevanceScore = Math.min(10, Math.max(3, Math.round((semanticPct / 100) * 10)));
+  const semanticPct = matchResult.breakdown.semanticSimilarity ?? 0;
+  const jobRelevanceScore = Math.min(10, Math.max(0, Math.round((semanticPct / 100) * 10)));
 
   const overallAts = parsingScore + keywordScore + skillsScore + experienceScore + structureScore + jobRelevanceScore;
 
   const atsScore: ATSAnalysisResult = {
-    overallScore: Math.min(100, Math.max(20, overallAts)),
+    overallScore: Math.min(100, Math.max(0, overallAts)),
     parsingCompatibility: parsingScore,
     keywordAlignment: keywordScore,
     skillsAlignment: skillsScore,

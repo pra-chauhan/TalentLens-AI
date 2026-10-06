@@ -60,10 +60,9 @@ export function calculateSemanticSimilarity(textA: string, textB: string): numbe
     normB += b * b;
   }
 
-  if (normA === 0 || normB === 0) return 40;
+  if (normA === 0 || normB === 0) return 0;
   const cosine = dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-  // Scale cosine [0, 1] to human-friendly 0-100 curve with minimum 30 base for related tech domains
-  return Math.min(100, Math.round(cosine * 85 + 25));
+  return Math.min(100, Math.round(cosine * 100));
 }
 
 /**
@@ -228,16 +227,21 @@ export function evaluateCandidateMatch(
   }
 
   // Project evidence score
-  let projectEvidenceScore = 50;
-  if (candidate.projects.length >= 1) projectEvidenceScore += 25;
-  if (candidate.projects.some(p => p.repoUrl || p.impactSnippet)) projectEvidenceScore += 20;
+  let projectEvidenceScore = 0;
+  if (candidate.projects.length >= 1) {
+    projectEvidenceScore = 60;
+    if (candidate.projects.some(p => p.repoUrl || p.impactSnippet)) projectEvidenceScore += 25;
+    if (candidate.projects.length >= 2) projectEvidenceScore += 15;
+  }
   projectEvidenceScore = Math.min(100, projectEvidenceScore);
 
   // Domain alignment
-  const domainAlignment = candidate.title.toLowerCase().includes('engineer') ||
-    candidate.summary.toLowerCase().includes(job.department.toLowerCase().split(' ')[0])
-    ? 90
-    : 70;
+  const candDomain = (candidate.title + ' ' + candidate.summary).toLowerCase();
+  const jobDomain = (job.title + ' ' + job.department).toLowerCase();
+  const jobKeywords = jobDomain.split(/[\s/,-]+/).filter(w => w.length > 3);
+  const matchedDomainWords = jobKeywords.filter(w => candDomain.includes(w));
+  const domainRatio = jobKeywords.length > 0 ? matchedDomainWords.length / jobKeywords.length : 0.5;
+  const domainAlignment = Math.min(100, Math.round(domainRatio * 70 + (matchedDomainWords.length > 0 ? 30 : 0)));
 
   // Composite Weighted Score
   const totalWeight = weights.requiredWeight +
@@ -256,7 +260,7 @@ export function evaluateCandidateMatch(
     domainAlignment * weights.domainWeight
   ) / (totalWeight || 100);
 
-  const overallScore = Math.max(15, Math.min(99, Math.round(rawOverall)));
+  const overallScore = Math.max(0, Math.min(100, Math.round(rawOverall)));
 
   // Overall Learning Distance computation
   let overallLearningDistance: LearningDistanceLevel = 'LOW';

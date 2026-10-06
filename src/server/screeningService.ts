@@ -161,10 +161,10 @@ export async function processResumeForBatch(
   }
 
   // Extract text
-  const rawText = await extractTextFromBuffer(buffer, filename, mimetype, geminiClient);
+  const { rawText, normalizedText } = await extractTextFromBuffer(buffer, filename, mimetype, geminiClient);
 
   // Build dynamic candidate profile
-  const profile = await buildDynamicCandidateProfile(rawText, filename, candidateIndex, geminiClient);
+  const profile = await buildDynamicCandidateProfile(normalizedText || rawText, filename, candidateIndex, geminiClient);
 
   // Build Job Requisition from batch JD
   const job = buildJobRequisitionFromJd(batch.jobTitle, batch.department, batch.jobDescription);
